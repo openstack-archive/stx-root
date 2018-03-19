@@ -37,6 +37,8 @@ usage () {
 }
 
 MY_YUM_CONF=""
+STD_REPO_ID="local-std"
+RT_REPO_ID="local-rt"
 
 NPROCS=$(nproc)
 
@@ -458,10 +460,11 @@ function final_touches {
 }
 
 function extract_pkg_from_local_repo {
-   local repodir=$1
-   local pkgname=$2
+   local yum_conf=$1
+   local repoid=$2
+   local pkgname=$3
 
-   local pkgfile=$(repoquery --repofrompath local,${repodir} --location -q ${pkgname})
+   local pkgfile=$(repoquery --config=${yum_conf} --repoid=${repoid} --location -q ${pkgname})
    if [ -z "${pkgfile}" ]; then
       echo "Could not find package $pkgname in $repodir"
       exit 1
@@ -488,9 +491,9 @@ function extract_installer_files {
 
    \cd kickstart.work
 
-   extract_pkg_from_local_repo ${CGCS_REPO_DIR} platform-kickstarts
-   extract_pkg_from_local_repo ${CGCS_REPO_DIR} platform-kickstarts-pxeboot
-   extract_pkg_from_local_repo ${CGCS_REPO_DIR} platform-kickstarts-extracfgs
+   extract_pkg_from_local_repo ${MY_YUM_CONF} ${STD_REPO_ID} platform-kickstarts
+   extract_pkg_from_local_repo ${MY_YUM_CONF} ${STD_REPO_ID} platform-kickstarts-pxeboot
+   extract_pkg_from_local_repo ${MY_YUM_CONF} ${STD_REPO_ID} platform-kickstarts-extracfgs
 
    \cp --preserve=all www/pages/feed/rel-*/*.cfg pxeboot/*.cfg ../kickstarts/ &&
    \cp --preserve=all extra_cfgs/*.cfg ../extra_cfgs/
@@ -546,9 +549,9 @@ EOM
    \mkdir $WORKDIR
    \cd $WORKDIR
 
-   extract_pkg_from_local_repo ${CGCS_REPO_DIR} pxe-network-installer
-   extract_pkg_from_local_repo ${CGCS_REPO_DIR} grub2-efi-x64-pxeboot
-   extract_pkg_from_local_repo ${CGCS_REPO_DIR} grub2-efi-x64-modules
+   extract_pkg_from_local_repo ${MY_YUM_CONF} ${STD_REPO_ID} pxe-network-installer
+   extract_pkg_from_local_repo ${MY_YUM_CONF} ${STD_REPO_ID} grub2-efi-x64-pxeboot
+   extract_pkg_from_local_repo ${MY_YUM_CONF} ${STD_REPO_ID} grub2-efi-x64-modules
 
    \mkdir -p $OUTPUT_DIST_DIR/isolinux/pxeboot/EFI/centos/x86_64-efi
 
