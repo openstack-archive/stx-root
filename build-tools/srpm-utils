@@ -156,6 +156,7 @@ srpm_create_raw_extract_script () {
    local RAW_SCRIPT=$6
    local TAR_DIR=$7
 
+   echo "SPEC_FILE=$SPEC_FILE  ROOT_DIR=$ROOT_DIR  RPMBUILD_DIR=$RPMBUILD_DIR  TARGET_ARCH=$TARGET_ARCH  TIS_PATCH_VER=$TIS_PATCH_VER  RAW_SCRIPT=$RAW_SCRIPT  TAR_DIR=$TAR_DIR"
    local BUILD_DIR="$RPMBUILD_DIR/BUILD"
    local ApplyPatchCount=0
 
@@ -228,7 +229,12 @@ srpm_create_raw_extract_script () {
       fi
    done
 
-   grep '^+' $STDERR_LOG | sed -e 's/^[+]* //' | grep -v "^rm .*$TAR_DIR" > $RAW_SCRIPT
+   if [ "$TAR_DIR" == "" ]; then
+       grep '^+' $STDERR_LOG | sed -e 's/^[+]* //' | grep -v "^for\>" > $RAW_SCRIPT
+   else
+       # Note: grep -v "^rm .*${TAR_DIR^}"  catches TAR_DIR that has been capitalized vs srpm name, like python
+       grep '^+' $STDERR_LOG | sed -e 's/^[+]* //' | grep -v "^for\>" | grep -v "^rm .*${TAR_DIR}" | grep -v "^rm .*${TAR_DIR^}"  > $RAW_SCRIPT
+   fi
    raw_fix_if_ApplyPatch $RAW_SCRIPT
    \rm -rf $STDOUT_LOG $STDERR_LOG $PREV_STDOUT_LOG $PREV_STDERR_LOG
    return 0
@@ -1689,7 +1695,7 @@ tarball_extract () {
        RAW_SCRIPT=$ROOT_DIR/$PKG_DIR/raw_script
        EXTRACT_SCRIPT=$ROOT_DIR/$PKG_DIR/extract_script
        echo "srpm_create_raw_extract_script '$SPEC_DIR/$SPEC' '$ROOT_DIR/$PKG_DIR'  '$ROOT_DIR/$BUILD_DIR'  '$TARGET_ARCH' '$TIS_PATCH_VER' '$RAW_SCRIPT'"
-       srpm_create_raw_extract_script $SPEC_DIR/$SPEC $ROOT_DIR/$PKG_DIR  $ROOT_DIR/$BUILD_DIR  $TARGET_ARCH $TIS_PATCH_VER $RAW_SCRIPT
+       srpm_create_raw_extract_script "$SPEC_DIR/$SPEC" "$ROOT_DIR/$PKG_DIR" "$ROOT_DIR/$BUILD_DIR"  "$TARGET_ARCH" "$TIS_PATCH_VER" "$RAW_SCRIPT" "$TAR_DIR"
        if [ $? -ne 0 ]; then
            echo "ERROR: $FUNCNAME (${LINENO}): srpm_create_raw_extract_script failed"
            cd $ORIG_DIR
@@ -2557,7 +2563,7 @@ srpm_extract_to_git () {
             fi
             mkdir -p $RPMBUILD_BUILD_DIR2
 
-            srpm_create_raw_extract_script $SPEC_DIR/$SPEC $ROOT_DIR/$PKG_DIR  $ROOT_DIR/$BUILD_DIR  $TARGET_ARCH $TIS_PATCH_VER $RAW_SCRIPT 
+            srpm_create_raw_extract_script "$SPEC_DIR/$SPEC" "$ROOT_DIR/$PKG_DIR"  "$ROOT_DIR/$BUILD_DIR"  "$TARGET_ARCH" "$TIS_PATCH_VER" "$RAW_SCRIPT"  "$TAR_DIR"
             if [ $? -ne 0 ]; then
                echo "ERROR: $FUNCNAME (${LINENO}): srpm_create_raw_extract_script post meta-patches failed"
                cd $ORIG_DIR
