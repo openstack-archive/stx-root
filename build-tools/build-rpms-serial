@@ -972,8 +972,13 @@ if [ $CLEAN_FLAG -eq 0 ] && [ $NO_DESCENDANTS -eq 0 ] && [ -f $SRPM_DIRECT_DESCE
 
                    # Iterate over binary rpms names required by the candidate package
                    for r in $(grep "^$n;" "$SRPM_RPM_DIRECT_REQUIRES_FILE" | sed "s/$n;//" | sed 's/,/ /g'); do
+                       if [ $r == $n ]; then
+                           # Ignore self dependency
+                           continue
+                       fi
+
                        # find a required rpm file with the rpm name we seek, AND is newer than the produced rpm file
-                       for rp in $(find $(echo $RPM_DIR | sed "s#/$BUILD_TYPE/#/std/#") -name "$r-[0-9]*.rpm" -cnewer $bp | grep -v '.src.rpm'); do
+                       for rp in $(find $(echo $RPM_DIR | sed "s#/$BUILD_TYPE/#/std/#") -name "$r-[0-9]*.rpm" -newermm $bp | grep -v '.src.rpm'); do
                            if [ "$r" != "$(rpm_get_name $rp)" ]; then
                                # rpm name doesn't match
                                continue
