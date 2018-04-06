@@ -165,12 +165,19 @@ function update_repo
 	return $RETCODE
 }
 
-# sign_shims - find and sign any shim package that we need to
+# sign_shims - find and sign any shim package that we need
+#              Note that shim might produce a "shim-unsigned-[verison-release]
+#              package (old shim) or shim-unsigned-x64-[v-r] &
+#              shim-unsigned-ia32 package (new shim).  In the case of new shim,
+#              we must do x64 only, and not ia32.
 #
 function sign_shims
 {
-	SHIM=`find $MY_WORKSPACE/std/rpmbuild/RPMS -name "shim-unsigned-*.$ARCH.rpm" | grep -v debuginfo`
-	if [ "x${SHIM}" == "x" ]; then
+	SHIM=`find $MY_WORKSPACE/std/rpmbuild/RPMS -name "shim-unsigned-x64-*.$ARCH.rpm" | grep -v debuginfo`
+	if [ -z "$SHIM" ]; then
+		SHIM=`find $MY_WORKSPACE/std/rpmbuild/RPMS -name "shim-unsigned-*.$ARCH.rpm" | grep -v debuginfo`
+	fi
+	if [ -z "${SHIM}" ]; then
 	    echo "Warning -- cannot find shim package to sign"
 	    return 0
 	fi
@@ -186,8 +193,8 @@ function sign_shims
 #
 function sign_grubs
 {
-	GRUB=`find $MY_WORKSPACE/std/rpmbuild/RPMS -name "grub2-efi-[1-9]*.$ARCH.rpm"`
-	UNSIGNED_GRUB=`find $MY_WORKSPACE/std/rpmbuild/RPMS -name "grub2-efi-unsigned*.$ARCH.rpm"`
+	GRUB=`find $MY_WORKSPACE/std/rpmbuild/RPMS -name "grub2-efi-x64-[1-9]*.$ARCH.rpm"`
+	UNSIGNED_GRUB=`find $MY_WORKSPACE/std/rpmbuild/RPMS -name "grub2-efi-x64-unsigned*.$ARCH.rpm"`
 	if [ "x${GRUB}" == "x" ]; then
 	    echo "Warning -- cannot find GRUB package to sign"
 	    return 0
@@ -324,7 +331,8 @@ function sign
 	fi
 	
 	# upload the unsigned package (if specified)
-	if [ "x$UNSIGNED" != "x" ]; then	
+	if [ "x$UNSIGNED" != "x" ]; then
+		echo "Uploading unsigned: $UNSIGNED"
 		scp -q $UNSIGNED $SIGNING_USER@$SIGNING_SERVER:$UPLOAD_PATH
 		if [ $? -ne 0 ]; then
 			echo "Failed to upload file $UNSIGNED"
@@ -356,7 +364,7 @@ function sign
 	# and examine them later without them being overwriten.  File paths are
 	# typically of the form
 	#
-	# /export/signed_images/XXXXXXX_grub2-efi-2.02-0.44.el7.centos.tis.3.x86_64.rpm
+	# /export/signed_images/XXXXXXX_grub2-efi-64-2.02-0.44.el7.centos.tis.3.x86_64.rpm
 	#
 	# Extract the output name, and copy the RPM back into our system
 	# (Note that we overwrite our original version of the RPM)

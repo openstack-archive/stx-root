@@ -23,6 +23,9 @@ SRPM_TO_RPM_MAP_FILE="$DEPENDANCY_DIR/srpm-to-rpm"
 UNBUILT_PATTERN_FILE="$MY_REPO/build-data/unbuilt_rpm_patterns"
 IMAGE_INC_FILE="$MY_REPO/build-tools/build_iso/image.inc"
 
+SIGN_SECURE_BOOT="sign-secure-boot"
+SIGN_SECURE_BOOT_LOG="sign-secure-boot.log"
+
 export MOCK=/usr/bin/mock
 
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
@@ -1316,9 +1319,9 @@ if [ 0$FORMAL_BUILD -eq 1 ] && [ "$USER" == "jenkins" ]; then
 		echo "We are jenkins, and we are trying to do a formal build -- calling signing server"
 		echo "  to sign boot RPMs with secure boot keys"
 
-		MY_WORKSPACE=$MY_WORKSPACE_TOP sign-build > $MY_WORKSPACE_TOP/export/sign-build.log 2>&1
+		MY_WORKSPACE=$MY_WORKSPACE_TOP ${SIGN_SECURE_BOOT} > $MY_WORKSPACE_TOP/export/${SIGN_SECURE_BOOT_LOG} 2>&1
 		if [ $? -ne 0 ]; then
-			echo "Signing of packages failed -- see $MY_WORKSPACE_TOP/export/sign-build.log"
+			echo "Signing of packages failed -- see $MY_WORKSPACE_TOP/export/${SIGN_SECURE_BOOT_LOG}.log"
 			exit 1
 		fi
 	fi
