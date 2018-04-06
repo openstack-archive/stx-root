@@ -74,7 +74,7 @@ gpgme
 grep
 groff-base
 grub2
-grub2-efi
+grub2-efi-x64
 grub2-tools
 grubby
 gsettings-desktop-schemas
@@ -229,8 +229,7 @@ rpm-libs
 rpm-python
 sed
 shared-mime-info
-shim
-shim-unsigned
+shim-x64
 slang
 snappy
 sqlite

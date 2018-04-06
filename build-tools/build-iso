@@ -296,8 +296,6 @@ function init_output_dir {
        perl -p -i -e "s/device=sda/device=${DEVICE}/g"  $OUTPUT_DIST_DIR/isolinux/isolinux.cfg
    fi
 
-
-
    # Copy UEFI files 
    \cp -L -ru $DISTRO_REPO_DIR/EFI/* $OUTPUT_DIST_DIR/isolinux/EFI/
    \cp -L $INTERNAL_REPO_ROOT/addons/wr-cgcs/layers/cgcs/mwa-beas/bsp-files/grub.cfg $OUTPUT_DIST_DIR/isolinux/EFI/BOOT/grub.cfg
@@ -357,7 +355,7 @@ function init_output_dir {
    if [ -f "$OUTPUT_DIR/efiboot.img" ]; then
 
       # The script update-efiboot-image was run outside the build-iso script, do nothing.
-      printf "  The image file $OUTPUT_DIR/efiboot.img already exist\n"
+      printf "  The image file $OUTPUT_DIR/efiboot.img already exists\n"
    else
       printf "  The image file $OUTPUT_DIR/efiboot.img does not exist \n"
       if [ ! -f "$INTERNAL_REPO_ROOT/build-tools/update-efiboot-image" ]; then
@@ -526,12 +524,13 @@ EOM
    \cd $WORKDIR
 
    extract_pkg_from_local_repo ${CGCS_REPO_DIR} pxe-network-installer
-   extract_pkg_from_local_repo ${CGCS_REPO_DIR} grub2-efi-pxeboot
+   extract_pkg_from_local_repo ${CGCS_REPO_DIR} grub2-efi-x64-pxeboot
+   extract_pkg_from_local_repo ${CGCS_REPO_DIR} grub2-efi-x64-modules
 
    \mkdir -p $OUTPUT_DIST_DIR/isolinux/pxeboot/EFI/centos/x86_64-efi
 
    \cp --preserve=all pxeboot/pxelinux.0 pxeboot/menu.c32 pxeboot/chain.c32 $OUTPUT_DIST_DIR/isolinux/pxeboot &&
-   \cp --preserve=all pxeboot/EFI/centos/x86_64-efi/* $OUTPUT_DIST_DIR/isolinux/pxeboot/EFI/centos/x86_64-efi/ &&
+   \cp --preserve=all usr/lib/grub/x86_64-efi/* $OUTPUT_DIST_DIR/isolinux/pxeboot/EFI/centos/x86_64-efi/ &&
    \cp --preserve=all pxeboot/EFI/grubx64.efi $OUTPUT_DIST_DIR/isolinux/pxeboot/EFI/
    if [ $? -ne 0 ]; then
       echo "Error: Could not copy all files from installer"

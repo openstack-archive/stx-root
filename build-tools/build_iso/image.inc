@@ -21,9 +21,7 @@ dpkg
 filesystem-scripts
 fm-api
 gdb
-grub2
-grub2-efi
-grub2-efi-modules
+grub2-efi-x64-modules
 grub2-tools
 haproxy
 io-monitor

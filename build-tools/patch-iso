@@ -259,13 +259,13 @@ fi
 
 \mkdir extract
 \cd extract
-extract_pkg_from_patch_repo grub2-efi-pxeboot
+extract_pkg_from_patch_repo grub2-x64-efi-pxeboot
 if [ $? -eq 0 ]; then
     # Replace files
     \rm -f ${BUILDDIR}/pxeboot/EFI/grubx64.efi &&
     \cp --preserve=all pxeboot/EFI/grubx64.efi ${BUILDDIR}/pxeboot/EFI/
     if [ $? -ne 0 ]; then
-        echo "Error: Failed to copy grub2-efi-pxeboot files"
+        echo "Error: Failed to copy grub2-x64-efi-pxeboot files"
         exit 1
     fi
 fi
