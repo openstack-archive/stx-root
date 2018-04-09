@@ -13,7 +13,7 @@ INITIAL_DIR=$(pwd)
 export DISTRO="centos"
 SRPM_SCRIPT="build_srpm"
 SRPM_DATA="build_srpm.data"
-PKG_DIRS_FILE=centos_pkg_dirs
+PKG_DIRS_FILE="${DISTRO}_pkg_dirs"
 
 DEFAULT_SRPM_SCRIPT="$DIR/default_$SRPM_SCRIPT"
 SCRIPT_PATH="$DISTRO"
@@ -22,7 +22,7 @@ FILES_PATH="$DISTRO/files"
 PATCHES_PATH="$DISTRO/patches"
 ORIG_SPECS_PATH="$DISTRO"
 SRPM_LIST_PATH="$DISTRO/srpm_path"
-MIRROR_ROOT="$MY_REPO/cgcs-centos-repo"
+MIRROR_ROOT="$MY_REPO/cgcs-${DISTRO}-repo"
 THIRD_PARTY_ROOT="$MY_REPO/cgcs-3rd-party-repo"
 REPO_DOWNLOADS_ROOT="$MY_REPO"
 SRPM_REBUILT_LIST=""
@@ -184,7 +184,7 @@ export MY_BUILD_CFG=$MY_WORKSPACE/$MY_BUILD_ENVIRONMENT_FILE
 export MY_MOCK_ROOT=$MY_WORKSPACE/mock/root
 
 if [ "$BUILD_TYPE" != "std" ]; then
-   PKG_DIRS_FILE=centos_pkg_dirs_$BUILD_TYPE
+   PKG_DIRS_FILE="${DISTRO}_pkg_dirs_${BUILD_TYPE}"
 fi
 
 echo "CLEAN_FLAG=$CLEAN_FLAG"
@@ -437,6 +437,13 @@ clean_srpm_dir () {
    local INPUTS_TO_CLEAN=""
 
    echo "clean_srpm_dir build_idx=$build_idx DIR=$DIR"
+
+   INPUTS_TO_CLEAN=$(dirname $(dirname $DIR))
+   echo "$INPUTS_TO_CLEAN" | grep -q "^$BUILD_INPUTS/"
+   if [ $? -ne 0 ] ; then
+       INPUTS_TO_CLEAN=""
+   fi
+
    for SRPM_PATH in $(find "$DIR" -name '*.src.rpm'); do
        SRPM_FILE=$(basename $SRPM_PATH)
        SRPM_NAME=$(rpm -q --queryformat '%{NAME}\n' --nosignature -p $SRPM_PATH 2>> /dev/null)
@@ -453,7 +460,21 @@ clean_srpm_dir () {
            \rm -rf $SOURCE_OUT/$SRPM_FILE
        fi
 
-       INPUTS_TO_CLEAN=$(if [ "x$INPUTS_TO_CLEAN" != "x" ]; then echo $INPUTS_TO_CLEAN; fi; find $BUILD_INPUTS -type d -name $SRPM_NAME)
+       local d
+       local src_d
+       local spec
+       local spec_name
+
+       for d in $(find $BUILD_INPUTS -type d -name "${SRPM_NAME}*") ;do
+           src_d=$(echo $d | sed "s#^$BUILD_INPUTS/#$MY_REPO/#")
+
+           for spec in $(find $src_d/${DISTRO} -name '*.spec'); do
+               spec_name=$(spec_find_tag Name $spec)
+               if [ "$spec_name" == "$SRPM_NAME" ]; then
+                   INPUTS_TO_CLEAN=$(if [ "x$INPUTS_TO_CLEAN" != "x" ]; then echo $INPUTS_TO_CLEAN; fi; echo "$d")
+               fi
+           done
+       done
 
        # Look for older versions of the same src rpm that also need cleaning
        for SRPM_OUT_PATH in $(ls -1 $SRPM_OUT/$SRPM_NAME*.src.rpm 2>> /dev/null); do
@@ -1216,7 +1237,7 @@ for g in $(find "$SRC_BASE" -type d -name .git | sort -V); do
       fi
       src_dir="$GIT_ROOT/$p"
       if [ -d $src_dir ]; then
-         if [ -d $src_dir/centos ]; then
+         if [ -d $src_dir/${DISTRO} ]; then
             rel_dir=$(echo $src_dir | sed "s:^$SRC_BASE::")
             work_dir="$BUILD_INPUTS$rel_dir"
 
@@ -1308,7 +1329,7 @@ if [ $ALL -eq 1 ]; then
             if [ -d $src_dir ]; then
                 if [ -d $src_dir/$DISTRO ]; then
 
-                    for f in $(find $src_dir/centos -name '*.spec' | sort -V); do
+                    for f in $(find $src_dir/${DISTRO} -name '*.spec' | sort -V); do
                         NAME=$(spec_find_tag Name "$f" 2>> /dev/null)
                         if [ $? -eq 0 ]; then
                             # PACKAGES_CONSIDERED="$PACKAGES_CONSIDERED $NAME"
