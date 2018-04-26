@@ -357,6 +357,7 @@ ntfs-3g
 ntfsprogs
 memcached
 python-memcached
+python2-coverage
 
 # kubernetes packages
 docker-ce
