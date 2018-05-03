@@ -355,6 +355,8 @@ rpm-plugin-systemd-inhibit
 platform-kickstarts
 python-lefthandclient
 python-3parclient
+ntfs-3g
+ntfsprogs
 
 # Add debugging tools
 perf
