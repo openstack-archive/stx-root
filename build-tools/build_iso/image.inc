@@ -24,6 +24,9 @@ gdb
 grub2-efi-x64-modules
 grub2-tools
 haproxy
+influxdb
+python2-influxdb
+influxdb-extensions
 io-monitor
 iperf3
 isomd5sum
@@ -283,6 +286,9 @@ config-gate
 config-gate-compute
 sysstat
 smartmontools
+collectd
+collectd-extensions
+puppet-collectd
 collector
 io-scheduler
 fm-doc
