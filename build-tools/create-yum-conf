@@ -1,0 +1,59 @@
+#!/bin/bash
+
+if [ "$MY_WORKSPACE" == "" ]; then
+   echo "ERROR: MY_WORKSPACE not defined"
+   exit 1;
+fi
+
+if [ "$MY_REPO" == "" ]; then
+   echo "ERROR: MY_REPO not defined"
+   exit 1;
+fi
+
+if [ "$MY_BUILD_ENVIRONMENT" == "" ]; then
+   echo "ERROR: MY_BUILD_ENVIRONMENT not defined"
+   exit 1;
+fi
+
+if [ "$MY_BUILD_DIR" == "" ]; then
+   echo "ERROR: MY_BUILD_DIR not defined"
+   exit 1;
+fi
+
+MY_YUM_CONF="$MY_WORKSPACE/yum.conf"
+MOCK_CFG_PROTO="$MY_REPO/cgcs-centos-repo/mock.cfg.proto"
+YUM_DIR="$MY_WORKSPACE/yum"
+YUM_CACHE="$YUM_DIR/cache"
+
+if [ -f "$MOCK_CFG_PROTO" ]; then
+    if [ -f "$MY_YUM_CONF" ]; then
+        N=$(find $MOCK_CFG_PROTO $MY_REPO/build-tools/create-yum-conf -cnewer $MY_YUM_CONF | wc -l) 
+        if [ $N -gt 0 ]; then
+            # New inputs, remove to force regeneration of yum.conf
+            \rm -f "$MY_YUM_CONF"
+        fi
+    fi
+fi
+   
+if [ ! -f "$MY_YUM_CONF" ]; then
+    if [ -f "$MOCK_CFG_PROTO" ]; then
+        mock_cfg_to_yum_conf.py "$MOCK_CFG_PROTO"      > "$MY_YUM_CONF"
+        sed -i "s%\[main\]%&\ncachedir=$YUM_CACHE%"      "$MY_YUM_CONF"
+        sed -i "s%logfile=.*%logfile=$YUM_DIR/yum.log%"  "$MY_YUM_CONF"
+        sed -i "s%LOCAL_BASE%file://%g"                  "$MY_YUM_CONF"
+        sed -i "s%MIRROR_BASE%file:///import/mirrors%g"  "$MY_YUM_CONF"
+        sed -i "s%BUILD_ENV%$MY_BUILD_ENVIRONMENT%g"     "$MY_YUM_CONF"
+        sed -i "s%/MY_BUILD_DIR%$MY_BUILD_DIR%g"         "$MY_YUM_CONF"
+        sed -i "s%/MY_REPO_DIR%$MY_REPO%g"               "$MY_YUM_CONF"
+    else
+        echo "ERROR: Could not find yum.conf or MOCK_CFG_PROTO"
+        exit 1
+    fi
+fi
+
+if [ ! -d "$YUM_CACHE" ]; then
+    mkdir -p "$YUM_CACHE"
+fi
+
+echo "$MY_YUM_CONF"
+exit 0

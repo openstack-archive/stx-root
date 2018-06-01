@@ -1,0 +1,12 @@
+*mangle
+:PREROUTING ACCEPT [0:0]
+:INPUT ACCEPT [0:0]
+:FORWARD ACCEPT [0:0]
+:OUTPUT ACCEPT [0:0]
+:POSTROUTING ACCEPT [0:0]
+-A OUTPUT -o eth0 -p tcp --sport 22 -j DSCP --set-dscp-class CS7
+-A OUTPUT -o eth0 -p tcp --dport 22 -j DSCP --set-dscp-class CS7
+-A OUTPUT -o eth0 -p udp --sport 67:68 -j DSCP --set-dscp-class CS7
+-A OUTPUT -o eth0 -p udp --dport 67:68 -j DSCP --set-dscp-class CS7
+-A OUTPUT -o eth0 -d 169.254.169.254 -j DSCP --set-dscp-class CS7
+COMMIT

@@ -1,0 +1,67 @@
+classify () {
+   local pkg_dir="$1"
+
+   if [ -f $pkg_dir/centos/srpm_path ]; then
+      # echo "srpm + patch: $(basename $(cat $pkg_dir/centos/srpm_path | head -n 1))"
+      echo "srpm + patches"
+   elif [ -f $pkg_dir/centos/*.spec ]; then
+      if [ -f $pkg_dir/centos/build_srpm ]; then
+         # echo "spec + custom_script: $pkg_dir"         
+         echo "spec + custom_script"         
+      elif [ -f $pkg_dir/centos/build_srpm.data ]; then
+         local ALLOW_EMPTY_RPM=""
+         local COPY_LIST=""
+         local SRC_DIR=""
+         local PKG_BASE="$pkg_dir"
+         source $pkg_dir/centos/build_srpm.data
+
+         if [ "" != "$SRC_DIR" ] ; then
+            # echo "spec + src_dir: $pkg_dir/$SRC_DIR"
+            echo "spec + src_dir"
+         elif [ "" != "$COPY_LIST" ] ; then
+            local TARBALL=""
+            for f in $COPY_LIST; do
+               case $f in
+                  *.tar.gz)  TARBALL=$f ;;
+                  *.tgz)     TARBALL=$f ;;
+                  *.tar.bz2) TARBALL=$f ;;
+                  *.tar.xz)  TARBALL=$f ;;
+                  *.tar)     TARBALL=$f ;;
+               esac
+            done
+            if [ "" != "$TARBALL" ]; then
+               # echo "spec + tarball: $pkg_dir/$TARBALL"
+               echo "spec + tarball"
+            else
+               # echo "spec + files: $pkg_dir"
+               echo "spec + files"
+            fi
+         elif [ "$ALLOW_EMPTY_RPM" == "true" ] ; then
+            # echo "spec + empty: $pkg_dir"
+            echo "spec + empty"
+         else
+            # echo "spec + build_srpm.data + unknown: $pkg_dir"
+            # cat $pkg_dir/centos/build_srpm.data
+            echo "spec + build_srpm.data + unknown"
+         fi
+      else
+         # echo "spec + unknown: $pkg_dir"
+         echo "spec + unknown"
+      fi
+   else
+      # echo "unknown: $pkg_dir"
+      echo "unknown"
+   fi
+}
+
+# for g in $(find $MY_REPO -type d -name .git); do
+#     d=$(dirname $g)
+#     c="$d/centos_pkg_dirs"
+#     if [ -f $c ]; then
+#        for d2 in $(cat $c); do
+#           pkg_dir="$d/$d2"
+#           echo "$(classify $pkg_dir): $pkg_dir"
+#        done
+#     fi
+# done
+

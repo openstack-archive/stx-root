@@ -1,0 +1,11 @@
+#
+# This file provides name=value pairs that are added to the build
+# config file as 'macros' passed into the RPM build
+#
+%__gzip=/usr/bin/pigz
+%__bzip2=/usr/bin/lbzip2
+%_patch_confdir=%{_sysconfdir}/patching
+%_patch_scripts=%{_patch_confdir}/patch-scripts
+%_runtime_patch_scripts=/run/patching/patch-scripts
+%_tis_dist=.tis
+

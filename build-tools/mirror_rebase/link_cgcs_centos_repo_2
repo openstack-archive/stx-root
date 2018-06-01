@@ -1,0 +1,82 @@
+#!/bin/bash
+
+#
+# Part of the monthly mirror update
+#
+# Update symlinks in cgcs-centos-repo to point to the latest version of packages in /import/mirrors/CentOS/tis-r5-CentOS/newton
+#
+# This step removes obsolete or broken Source links
+#
+
+MIRROR_ROOT=/import/mirrors/CentOS/tis-r5-CentOS/newton
+BIN_ROOT=$MIRROR_ROOT/Binary
+SRC_ROOT=$MIRROR_ROOT/Source
+
+cd $MY_REPO/cgcs-centos-repo
+
+if [ $? -ne 0 ]; then
+   echo 'ERROR: failed to cd to $MY_REPO/cgcs-centos-repo'
+   return 1
+fi
+
+
+# Clean broken and obsolete srpm links
+snames=" "
+for dat in $(for br in $(find Source -name '*.src.rpm'); do
+              d=$(dirname $br)
+              b=$(basename $br)
+              s=$(echo $b | sed -e 's#.centos.#.#' -e 's#.el7.#.#'  -e 's#.el7_##' -e 's#.rpm$##' -e 's#.src$##' -e 's#.noarch$##' -e 's#.x86_64$##')
+              echo "$s#$b#$d"
+            done | sort -r -V)
+do
+   sb=$(echo "$dat" | awk -F '#' '{ print $2 }')
+   d=$(echo "$dat" | awk -F '#' '{ print $3 }')
+   s="$d/$sb"
+
+   if [ ! -f $s ]; then
+      continue
+   fi
+
+   link=$(readlink $s)
+   if [ ! -f $link ]; then
+      echo "ERROR: '$sb' link to non-existant file '$link'"
+      echo "SUGGEST: rm $s"
+      git rm -f $s
+      continue
+   fi
+
+   echo $link | grep "$MIRROR_ROOT" >> /dev/null
+   if [ $? -ne 0 ]; then
+      echo "ERROR: '$sb' links to unexpected file '$link'"
+      echo "SUGGEST: rm $s"
+      git rm -f $s
+      continue
+   fi
+
+   sname=$(rpm -q --nosignature --queryformat '%{NAME}\n' -p $s)
+   echo "$snames" | grep " $sname " >> /dev/null
+   if [ $? -ne 0 ]; then
+      if [ "x$sname" != "x" ]; then
+          for s2 in $(find Source -name "$sname-*.src.rpm"); do
+              sb2=$(basename $s2)
+              if [ "$sb" != "$sb2" ]; then
+                 sname2=$(rpm -q --nosignature --queryformat '%{NAME}\n' -p $s2)
+                 if [ "$sname" == "$sname2" ]; then
+                    link=$(echo $s2 | sed "s#^$MIRROR_ROOT/##")
+                    echo "SUGGEST: rm $link, due to $sb"
+                    git rm -f $link
+
+                    for r3 in $(find Binary -name "$sname-*.rpm"); do
+                       sb3=$(rpm -q --info --nosignature -p $r3 | grep '^Source RPM  : ' | sed 's#^Source RPM  : ##')
+                       if [ "$sb3" == "$sb2" ]; then
+                          echo "SUGGEST: rm $r3, due to $sb2"
+                       fi
+                    done
+                 fi
+              fi
+          done
+      fi
+      snames="${snames}${sname} "
+   fi
+done
+

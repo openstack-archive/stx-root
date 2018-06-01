@@ -1,0 +1,13 @@
+# exclude special filesystems
+/builddir
+/dev/*
+/proc/*
+/tmp/*
+/sys/*
+/root/rootfs.tar
+
+# exclude local repo yum configuration
+/etc/yum/yum.conf
+
+# omit platform hooks to check install uuid
+/etc/dhcp/dhclient-enter-hooks

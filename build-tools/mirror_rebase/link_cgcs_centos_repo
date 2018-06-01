@@ -1,0 +1,225 @@
+#!/bin/bash
+
+#
+# Part of the monthly mirror update
+#
+# Update symlinks in cgcs-centos-repo to point to the latest version of packages in /import/mirrors/CentOS/tis-r5-CentOS/newton
+#
+# This step updates Binary links, and adds Source links
+#
+
+MIRROR_ROOT=/import/mirrors/CentOS/tis-r5-CentOS/newton
+BIN_ROOT=$MIRROR_ROOT/Binary
+SRC_ROOT=$MIRROR_ROOT/Source
+BLACK_LIST_FILE=$MIRROR_ROOT/Data/black_list.txt
+WHITE_LIST_FILE=$MIRROR_ROOT/Data/white_list.txt
+
+cd $MY_REPO/cgcs-centos-repo
+
+if [ $? -ne 0 ]; then
+   echo 'ERROR: failed to cd to $MY_REPO/cgcs-centos-repo'
+   return 1
+fi
+
+names=' '
+snames=' '
+
+do_work () {
+   dat=${1}
+
+   b=$(echo "$dat" | awk -F '#' '{ print $2 }')
+   d=$(echo "$dat" | awk -F '#' '{ print $3 }')
+   r="$d/$b"
+
+   DEBUG_INFO=0
+   MATCH=$(echo $b | grep '[-]debuginfo-')
+   if [ "$MATCH" != "" ]; then
+      DEBUG_INFO=1
+   fi
+
+   MATCH=$(grep "^$b" $BLACK_LIST_FILE || true)
+   if [ "$MATCH" != "" ]; then
+      echo "NOTE: '$b' is black listed"
+      continue
+   fi
+
+   if [ $DEBUG_INFO -eq 1 ]; then
+      sb=$(rpm -q --info --nosignature -p $r | grep '^Source RPM  : ' | sed 's#^Source RPM  : ##')
+      if [ "x$sb" == "x" ]; then
+         echo "ERROR: no source rpm listed for '$b'"
+         continue
+      fi
+      s=$(find Source -name "$sb")
+      if [ "x$s" == "x" ]; then
+         echo "NOTE: no source rpm '$sb' found for '$b'"
+         continue
+      fi
+   fi
+
+   name=$(rpm -q --nosignature --queryformat '%{NAME}\n' -p $r)
+
+   MATCH=$(grep "^$b" $WHITE_LIST_FILE || true)
+   if [ "$MATCH" == "" ]; then
+      # Not white listed, check for python2 alternative
+      # python-rpm-macros-3-6.1 is a notable case white_list case... 
+      # We need BOTH python-rpm-macros-3-6.1 and python2-rpm-macros-3-6.1
+      #  so substituting python-rpm-macros-3-6.1 with python2-rpm-macros-3-6.1 is an error
+
+      altname=$(echo $name | sed 's#^python-#python2-#')
+      if [ "$altname" != "$name" ]; then
+         # look for python2 alternative
+         sb=$(rpm -q --info --nosignature -p $r | grep '^Source RPM  : ' | sed 's#^Source RPM  : ##')
+
+         if [ "x$sb" != "x" ]; then
+            MATCH=$(grep "^$sb" $BLACK_LIST_FILE || true)
+            if [ "$MATCH" != "" ]; then
+               echo "NOTE: '$sb' is black listed, so '$b' is ignored"
+               continue
+            fi
+         fi
+
+         for dat2 in $(for br in $(find $BIN_ROOT -name "$altname-*.rpm" | grep -v '.src.rpm$' | grep -v '[-]debuginfo-'); do
+                         ddd=$(dirname $br)
+                         bbb=$(basename $br)
+                         sss=$(echo $bbb | sed -e 's#.centos.#.#' -e 's#.el7.#.#'  -e 's#.el7_##' -e 's#.rpm$##' -e 's#.src$##' -e 's#.noarch$##' -e 's#.x86_64$##')
+                         echo "$sss#$bbb#$ddd"
+                     done | sort -r -V)
+         do
+             b2=$(echo "$dat2" | awk -F '#' '{ print $2 }')
+             d2=$(echo "$dat2" | awk -F '#' '{ print $3 }')
+             r2="$d2/$b2"
+             name2=$(rpm -q --nosignature --queryformat '%{NAME}\n' -p $r2)
+             if [ "$name2" != "$altname" ]; then
+                continue
+             fi
+             sb2=$(rpm -q --info --nosignature -p $r2 | grep '^Source RPM  : ' | sed 's#^Source RPM  : ##')
+             # if [ "$sb" == "$sb2" ]; then
+             #   continue
+             # fi
+
+             sbs=$(echo $sb | sed -e 's#.centos.#.#' -e 's#.el7.#.#'  -e 's#.el7_##' -e 's#.rpm$##' -e 's#.src$##' -e 's#.noarch$##' -e 's#.x86_64$##')
+             sbs2=$(echo $sb2 | sed -e 's#.centos.#.#' -e 's#.el7.#.#'  -e 's#.el7_##' -e 's#.rpm$##' -e 's#.src$##' -e 's#.noarch$##' -e 's#.x86_64$##')
+             newer=$((echo $sbs; echo $sbs2) | sort -r -V | head -n 1)
+             if [ "$sbs" != "$sbs2" ]; then
+                if [ "$newer" == "$sbs2" ]; then
+                   # swap alternate for original
+                   for link in $(find Binary -name $b); do
+                      echo "SUGGEST: rm $link"
+                      git rm -f $link
+                   done
+   
+                   r=$r2
+                   name=$name2
+                   b=$b2
+                   break
+                fi
+             fi
+         done
+      fi
+   fi
+
+   echo "$names" | grep " $name " >> /dev/null
+   if [ $? -ne 0 ]; then
+      sb=$(rpm -q --info --nosignature -p $r | grep '^Source RPM  : ' | sed 's#^Source RPM  : ##')
+      if [ "x$sb" == "x" ]; then
+         echo "ERROR: no source rpm listed for '$b'"
+         continue
+      fi
+      s=$(find $SRC_ROOT -name "$sb")
+      if [ "x$s" == "x" ]; then
+         echo "ERROR: no source rpm '$sb' found for '$b'"
+         continue
+      fi
+
+      if [ "x$sb" != "x" ]; then
+         MATCH=$(grep "^$sb" $BLACK_LIST_FILE || true)
+         if [ "$MATCH" != "" ]; then
+            echo "NOTE: '$sb' is black listed, so '$b' is ignored"
+            continue
+         fi
+      fi
+
+      sname=$(rpm -q --nosignature --queryformat '%{NAME}\n' -p $s)
+
+      lb=$(find Binary -name "$b")
+      if [ "x$lb" == "x" ]; then
+          echo "MISSING: '$b'"
+          link=$(echo $r | sed "s#^$MIRROR_ROOT/##")
+          echo "SUGGEST: ln -s $r $link"
+          ln -s $r $link
+          git add $link
+      else
+          echo "OK: '$b'"
+      fi
+
+      for r2 in $(find Binary -name "$name-*.rpm"); do
+          b2=$(basename $r2)
+          if [ "$b" != "$b2" ]; then
+             name2=$(rpm -q --nosignature --queryformat '%{NAME}\n' -p $r2)
+             if [ "$name" == "$name2" ]; then
+                MATCH=$(grep "^$b2" $WHITE_LIST_FILE || true)
+                if [ "$MATCH" != "" ]; then
+                   link=$(echo $r2 | sed "s#^$MIRROR_ROOT/##")
+                   echo "SUGGEST: rm $link"
+                   git rm -f $link
+                fi
+             fi
+          fi
+      done
+
+      if [ $DEBUG_INFO -eq 0 ]; then
+         # Not a debuginfo therefore we can pull in new src.rpm
+         names="${names}${name} "
+         lsb=$(find Source -name "$sb")
+         if [ "x$lsb" == "x" ]; then
+             echo "MISSING: '$sb'"
+             link=$(echo $s | sed "s#^$MIRROR_ROOT/##")
+             echo "SUGGEST: ln -s $s $link"
+             ln -s $s $link
+             git add $link
+         else
+             echo "OK: '$sb'"
+         fi
+
+         echo "$names" | grep " $name " >> /dev/null
+         if [ $? -ne 0 ]; then
+            for s2 in $(find Source -name "$sname-*.rpm"); do
+                sb2=$(basename $s2)
+                if [ "$sb" != "$sb2" ]; then
+                   sname2=$(rpm -q --nosignature --queryformat '%{NAME}\n' -p $s2)
+                   if [ "$sname" == "$sname2" ]; then
+                      MATCH=$(grep "^$sb2" $WHITE_LIST_FILE || true)
+                      if [ "$MATCH" != "" ]; then
+                         link=$(echo $s2 | sed "s#^$MIRROR_ROOT/##")
+                         echo "SUGGEST: rm $link"
+                         git rm -f $link
+                      fi
+                   fi
+                fi
+            done
+         fi
+         snames="${snames}${sname} "
+      fi
+   fi
+}
+
+
+for dat in $(for br in $(find $BIN_ROOT -name '*.rpm' | grep -v '.src.rpm$' | grep -v '[-]debuginfo-'); do
+              d=$(dirname $br)
+              b=$(basename $br)
+              s=$(echo $b | sed -e 's#.centos.#.#' -e 's#.el7.#.#'  -e 's#.el7_##' -e 's#.rpm$##' -e 's#.src$##' -e 's#.noarch$##' -e 's#.x86_64$##')
+              echo "$s#$b#$d"
+            done | sort -r -V)
+do
+   do_work ${dat}
+done
+
+for dat in $(for br in $(find $BIN_ROOT -name '*.rpm' | grep -v '.src.rpm$' | grep '[-]debuginfo-'); do
+              d=$(dirname $br)
+              b=$(basename $br)
+              s=$(echo $b | sed -e 's#.centos.#.#' -e 's#.el7.#.#'  -e 's#.el7_##' -e 's#.rpm$##' -e 's#.src$##' -e 's#.noarch$##' -e 's#.x86_64$##')
+              echo "$s#$b#$d"
+            done | sort -r -V)
+do
+   do_work ${dat}
+done

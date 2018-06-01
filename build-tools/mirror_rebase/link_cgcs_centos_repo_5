@@ -1,0 +1,94 @@
+#!/bin/bash
+
+#
+# Part of the monthly mirror update
+#
+# Update symlinks in cgcs-centos-repo to point to the latest version of packages in /import/mirrors/CentOS/tis-r5-CentOS/newton
+#
+# Search for tis patched centos src.rpm's that have been upversioned
+#
+
+cd $MY_REPO/cgcs-centos-repo
+# OLD_MIRROR_ROOT=/import/mirrors/CentOS/tis-r5-CentOS/mitaka
+OLD_MIRROR_ROOT=/import/mirrors/CentOS/tis-r5-CentOS/newton
+# MIRROR_ROOT=/import/mirrors/CentOS/tis-r5-CentOS/newton
+OLD_THIRD_MIRROR_ROOT=/import/mirrors/CentOS/tis-r5-CentOS/tis-r4-3rd-Party
+# THIRD_MIRROR_ROOT=/import/mirrors/CentOS/tis-r5-CentOS/tis-r4-3rd-Party
+# BIN_ROOT=$MIRROR_ROOT/Binary
+# SRC_ROOT=$MIRROR_ROOT/Source
+UPVERSION_LOG=$MY_WORKSPACE/upversion.log
+
+REPO_DOWNLOADS_ROOT="$MY_REPO"
+NEW_MIRROR_ROOT="$MY_REPO/cgcs-centos-repo"
+THIRD_PARTY_ROOT="$MY_REPO/cgcs-3rd-party-repo"
+
+
+if [ -f $UPVERSION_LOG ]; then
+   rm -f $UPVERSION_LOG
+fi
+
+cd $MY_REPO
+
+for g in $(find $MY_REPO -type d -name .git); do 
+   d=$(dirname $g)
+   for pf in $(find $d -maxdepth 1 -name 'centos_pkg_dirs*'); do 
+   if [ -f $pf ]; then
+      for p in $(cat $pf); do
+         pkg_dir="$d/$p"
+         sf="$pkg_dir/centos/srpm_path"
+         if [ -f  $sf ]; then
+            for s in $(grep  '^[^#]' $sf); do
+               ORIG_SRPM_PATH=""
+               # absolute path source rpms
+               echo "$s" | grep "^/" >/dev/null && ORIG_SRPM_PATH=$s
+
+               if [ "${ORIG_SRPM_PATH}x" == "x" ]; then
+                  # handle repo: definitions
+                  echo "$s" | grep "^repo:" >/dev/null && ORIG_SRPM_PATH=$(echo $s | sed "s%^repo:%$REPO_DOWNLOADS_ROOT/%")
+               fi
+
+               if [ "${ORIG_SRPM_PATH}x" == "x" ]; then
+                  # handle 3rd_party: definitions
+                  echo "$s" | grep "^3rd_party:" >/dev/null && ORIG_SRPM_PATH=$(echo $s | sed "s%^3rd_party:%$THIRD_PARTY_ROOT/%")
+               fi
+
+               if [ "${ORIG_SRPM_PATH}x" == "x" ]; then
+                  # handle mirror: definitions
+                  # SAL TEMPORARY echo "$s" | grep "^mirror:" >/dev/null && ORIG_SRPM_PATH=`echo $s | sed "s%^mirror:%$MIRROR_ROOT/%"`
+                  echo "$s" | grep "^mirror:" >/dev/null && ORIG_SRPM_PATH=$(echo $s | sed "s%^mirror:%$NEW_MIRROR_ROOT/%" | sed "s#CentOS/tis-r4-CentOS/kilo/##" | sed "s#CentOS/tis-r4-CentOS/mitaka/##" | sed "s#CentOS/tis-r4-CentOS/newton/##")
+               fi
+
+               if [ "${ORIG_SRPM_PATH}x" == "x" ]; then
+                  # we haven't found a valid prefix yet, so assume it's a legacy
+                  # file (mirror: interpretation)
+                  ORIG_SRPM_PATH="$NEW_MIRROR_ROOT/$s"
+               fi
+
+               if [ ! -f $ORIG_SRPM_PATH ]; then
+                  b=$(basename "$ORIG_SRPM_PATH")
+                  old_srpm=$(find $OLD_MIRROR_ROOT $OLD_THIRD_MIRROR_ROOT -name $b | head -n 1)
+                  old_name=$(rpm -q --nosignature --queryformat '%{NAME}\n' -p $old_srpm)
+                  if [ "$old_name" == "" ]; then
+                     echo "FAILED to find name for '$b', ORIG_SRPM_PATH='$ORIG_SRPM_PATH'"
+                     exit 1
+                  fi
+                  NEW_SRPM_PATH=""
+                  for new_srpm in $(find $NEW_MIRROR_ROOT/Source $THIRD_PARTY_ROOT/Source -name "$old_name-[0-9]*.src.rpm"); do
+                      new_name=$(rpm -q --nosignature --queryformat '%{NAME}\n' -p $new_srpm)
+                      if [ "$new_name" == "$old_name" ]; then
+                         NEW_SRPM_PATH=$new_srpm
+                         break
+                      fi
+                  done
+                  nb=$(basename $NEW_SRPM_PATH)
+                  echo "FIX: '$sf' : '$b' -> '$nb'"
+                  echo "$old_name#$sf#$s#$b#$nb" >> $UPVERSION_LOG
+               fi
+
+            done
+         fi
+      done
+   fi
+   done
+done
+

@@ -1,0 +1,91 @@
+#!/bin/bash
+
+#
+# Part of the monthly mirror update
+#
+# Update symlinks in cgcs-centos-repo to point to the latest version of packages in /import/mirrors/CentOS/tis-r5-CentOS/newton
+#
+# start an edit session for packages to be upgraded - pre upgrade version
+#
+
+UPVERSION_LOG=$MY_WORKSPACE/upversion.log
+if [ "x$WORKING_BRANCH" == "x" ]; then
+   WORKING_BRANCH=CGCS_DEV_0029_rebase_7_4
+fi
+
+if [ ! -f $UPVERSION_LOG ]; then
+    echo "ERROR: Can't find UPVERSION_LOG at '$UPVERSION_LOG'"
+fi
+
+
+# One step back to see the old symlinks
+cd $MY_REPO/cgcs-3rd-party-repo
+git checkout $WORKING_BRANCH
+if [ $? != 0 ]; then
+   echo "ERROR: Can't checkout branch '$WORKING_BRANCH' in directory '$(pwd)'"
+   exit 1
+fi
+
+git checkout HEAD^
+
+cd $MY_REPO/cgcs-centos-repo
+git checkout $WORKING_BRANCH
+if [ $? != 0 ]; then
+   echo "ERROR: Can't checkout branch '$WORKING_BRANCH' in directory '$(pwd)'"
+   exit 1
+fi
+
+git checkout HEAD^
+
+#
+#
+#
+FAILED=""
+for dat in $(cat $UPVERSION_LOG); do
+   name=$(echo $dat | awk -F '#' '{print $1}')
+   srpm_path=$(echo $dat | awk -F '#' '{print $2}')
+   old_src_rpm=$(echo $dat | awk -F '#' '{print $4}')
+   new_src_rpm=$(echo $dat | awk -F '#' '{print $5}')
+
+   echo "$name  $old_src_rpm  $new_src_rpm"
+
+   if [ "$name" == "kernel" ]; then
+      build-pkgs --std --edit --clean $name
+   elif [ "$name" == "kernel-rt" ]; then
+      build-pkgs --rt --edit --clean $name
+   else
+      build-pkgs --edit --clean $name
+   fi
+   if [ $? -ne 0 ]; then
+      echo "ERROR: failed cmd 'build-pkgs --edit --clean $name'"
+      FAILED="$name $FAILED"
+      break
+   fi
+   echo "$?   <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<"
+   if [ "$name" == "kernel" ]; then
+      build-pkgs --std --edit $name
+   elif [ "$name" == "kernel-rt" ]; then
+      build-pkgs --rt --edit $name
+   else
+      build-pkgs --edit $name
+   fi
+   if [ $? -ne 0 ]; then
+      echo "ERROR: failed cmd 'build-pkgs --edit $name'"
+      FAILED="$name $FAILED"
+      break
+   fi
+   echo "$?   <=<=<=<=<=<=<=<=<=<=<=<=<=<=<=<="
+done
+
+cd $MY_REPO/cgcs-3rd-party-repo
+git checkout $WORKING_BRANCH
+
+cd $MY_REPO/cgcs-centos-repo
+git checkout $WORKING_BRANCH
+
+if [ "$FAILED" != "" ]; then
+   echo "Failed build-pkgs --edit for ... $FAILED"
+   exit 1
+fi
+
+

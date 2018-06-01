@@ -1,0 +1,70 @@
+#!/bin/bash
+
+# We find SDK files in two ways -- one is that any package with an
+# "-cgts-sdk" component in the filename is deemed to have SDK content
+# (this works great for packages that produce installable content, as well
+# as SDK content which is placed in a separate -cgts-sdk package)
+#
+# The second way is explicitly name packages that contain SDK content.  This
+# works well for packages which only contain SDK content.  The other reason
+# that calling out packages explcitly may be of use is that some packages
+# (like restapi-doc) may not be built automatically because they get caught
+# in the blacklist filter (i.e. we normally don't build restapi-doc because
+# it contains "doc").
+
+EXPLICIT_PACKAGES=( \
+	wrs-branding \
+	wrs-heat-templates \
+	install-log-server \
+	restapi-doc \
+	remote-clients \
+	)
+
+extract_to_sdk () {
+	pushd $SDKTMP
+	rpm2cpio $1 | cpio -id
+	popd
+}
+
+SDKDIR=$MY_WORKSPACE/export/cgts-sdk
+SDKTMP=$MY_WORKSPACE/export/cgts-sdk_tmp
+SDKTMPFILE=$MY_WORKSPACE/export/sdk_tmp_file
+
+# These patterns match packages for which we find SDK tarballs
+PATTERNS=(wrs-branding*.x86_64.rpm \
+	wrs-heat-templates*.x86_64.rpm \
+	*cgts-sdk*.x86_64.rpm  \
+	install-log-server*.x86_64.rpm \
+	restapi-doc*.x86_64.rpm \
+	remote-clients*.x86_64.rpm )
+
+rm -f $SDKTMPFILE
+
+for pkg in "${EXPLICIT_PACKAGES[@]}"; do
+	ls $MY_WORKSPACE/std/rpmbuild/RPMS/$pkg*.x86_64.rpm > /dev/null
+	if [ $? -eq 2 ]; then # no page found...
+		build-rpms --std $pkg --no-descendants
+	fi
+done
+
+for pat in "${PATTERNS[@]}"; do
+	find $MY_WORKSPACE/std/rpmbuild/RPMS/$pat >> $SDKTMPFILE
+done
+
+rm -rf $SDKDIR $SDKTMP
+mkdir -p $SDKDIR
+mkdir -p $SDKTMP
+
+# extract the files
+while read rpm; do
+	extract_to_sdk $rpm
+done < $SDKTMPFILE
+
+find $SDKTMP -name "*.tgz" -exec cp -v {} $SDKDIR \;
+
+rm -f $SDKTMPFILE
+rm -rf $SDKTMP
+
+echo ""
+echo "Done.  SDK in $SDKDIR"
+echo ""

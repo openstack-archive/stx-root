@@ -1,0 +1,130 @@
+#!/bin/sh
+
+# This script modifies a mock configuration file (typically $MY_BUILD_CFG)
+# to add build time environment variables to the mock environment (things
+# like what branch we're building on, etc).
+#
+# For reasons of security, the host environment variables cannot normally be
+# passed through to the mock environment, so this scripts sets the variables
+# to literal values.
+#
+# usage: modify-build-cfg [file.cfg]
+#
+
+MOCK_CFG_PROTO="$MY_REPO/cgcs-centos-repo/mock.cfg.proto"
+if [ ! -f "$MOCK_CFG_PROTO" ]; then
+   echo "ERROR: Couldn't find mock config prototype at '$MOCK_CFG_PROTO'"
+   exit 1
+fi
+
+if [ "${1}x" == "x" ]; then
+	FILE=$MY_BUILD_CFG
+else
+	FILE=$1
+fi
+
+if [ -f $MOCK_CFG_PROTO ]; then
+   if [ -f $FILE ]; then
+      NEWER=$(find "$MOCK_CFG_PROTO" -newer "$FILE")
+      if [ "x$NEWER" != "x" ]; then
+         \rm -f -v "$FILE"
+      fi
+   fi
+fi
+
+if [ ! -f $FILE ]; then
+   if [ -z $MY_BUILD_ENVIRONMENT ] || [ -z $MY_BUILD_DIR ] || [ -z $MY_REPO ]; then
+      echo "Can't create $FILE without MY_BUILD_ENVIRONMENT, MY_BUILD_DIR and MY_REPO environment variables"
+      exit 1
+   fi
+
+   echo "Recreating $FILE"
+   \cp -f -v "$MOCK_CFG_PROTO" "$FILE"
+   if [ $? -ne 0 ]; then
+      echo "Couldn't find config file '$FILE', nor construct it from '$MOCK_CFG_PROTO'"
+      exit 1
+   fi
+
+   sed -i "s%LOCAL_BASE%http://127.0.0.1:8088%g"  "$FILE"
+   sed -i "s%MIRROR_BASE%http://127.0.0.1:8088%g" "$FILE"
+   sed -i "s%BUILD_ENV%$MY_BUILD_ENVIRONMENT%g"   "$FILE"
+   sed -i "s%/MY_BUILD_DIR%$MY_BUILD_DIR_TOP%g"   "$FILE"
+   sed -i "s%/MY_REPO_DIR%$MY_REPO%g"             "$FILE"
+
+   # Disable all local-* repos for the build-types other than the current one
+   for bt in std rt; do
+      if [ "$bt" != "$BUILD_TYPE" ]; then
+         # Use the range of lines starting with pattern [local-$bt] until the next line starting with []
+         sed -i "/^\[local-$bt\]/,/^\[/ s/enabled=1/enabled=0/" $FILE
+      fi
+   done
+fi
+
+
+# Add environment variables to mock config if they don't exist
+grep -q "config_opts\['environment'\]\['BUILD_BY'\]" $FILE || \
+    echo "config_opts['environment']['BUILD_BY']" >> $FILE
+
+grep -q "config_opts\['environment'\]\['BUILD_DATE'\]" $FILE || \
+    echo "config_opts['environment']['BUILD_DATE']" >> $FILE
+
+grep -q "config_opts\['environment'\]\['REPO'\]" $FILE || \
+    echo "config_opts['environment']['REPO']" >> $FILE
+
+grep -q "config_opts\['environment'\]\['WRS_GIT_BRANCH'\]" $FILE || \
+    echo "config_opts['environment']['WRS_GIT_BRANCH']" >> $FILE
+
+grep -q "config_opts\['environment'\]\['CGCS_GIT_BRANCH'\]" $FILE || \
+    echo "config_opts['environment']['CGCS_GIT_BRANCH']" >> $FILE
+
+if [ -z $FORMAL_BUILD ]; then 
+    grep -q "config_opts\['macros'\]\['%_no_cgcs_license_check'\] = '1'" $FILE || \
+	echo "config_opts['macros']['%_no_cgcs_license_check'] = '1'" >> $FILE
+else
+    sed -i "/config_opts\['macros'\]\['%_no_cgcs_license_check'\] = '1'/d" $FILE
+fi
+
+grep -q "config_opts\['macros'\]\['%_tis_build_type'\] = '$BUILD_TYPE'" $FILE || \
+    echo "config_opts['macros']['%_tis_build_type'] = '$BUILD_TYPE'" >> $FILE
+
+if [ -f /usr/lib64/nosync/nosync.so ]; then
+    grep -q "config_opts\['nosync'\] = True" $FILE || \
+        echo "config_opts['nosync'] = True" >> $FILE
+fi
+
+grep -q "config_opts\['chroot_setup_cmd'\] = 'install @buildsys-build pigz lbzip2 yum'" $FILE || \
+    echo "config_opts['chroot_setup_cmd'] = 'install @buildsys-build pigz lbzip2 yum'" >> $FILE
+
+#
+# Read macros from tis.macros to add to the build config file,
+# for use in RPM spec files
+#
+RPM_MACROS=$MY_REPO/build-tools/tis.macros
+sed 's/#.*//' $RPM_MACROS | grep '=' | while IFS='=' read name value; do
+    # Check if the entry already exists. If so, go to next line
+    grep -q "^config_opts\['macros'\]\['${name}'\] = '${value}'$" $FILE && continue
+
+    # Update or add the entry
+    grep -q "^config_opts\['macros'\]\['${name}'\]" $FILE
+    if [ $? -eq 0 ]; then
+        sed -i -r "s#^(config_opts\['macros'\]\['${name}'\]).*#\1 = '${value}'#" $FILE
+    else
+        echo "config_opts['macros']['${name}'] = '${value}'" >> $FILE
+    fi
+done
+
+# okay, now we have lines for each env var.  Generate the correct values
+
+BUILD_DATE=`date "+%F %T %z"`
+CGCS_GIT_BRANCH=`cd $MY_REPO/addons/wr-cgcs/layers/cgcs/; git rev-parse --abbrev-ref HEAD`
+WRS_GIT_BRANCH=`cd $MY_REPO; git rev-parse --abbrev-ref HEAD`
+REPO=$MY_REPO
+
+# Finally, our good friend sed will place the values in the mock config file
+sed -i \
+    -e "s#config_opts\['environment'\]\['BUILD_BY'\].*#config_opts\['environment'\]\['BUILD_BY'\] = '$USER'#" \
+    -e "s#config_opts\['environment'\]\['BUILD_DATE'\].*#config_opts\['environment'\]\['BUILD_DATE'\] = '$BUILD_DATE'#" \
+    -e "s#config_opts\['environment'\]\['REPO'\].*#config_opts\['environment'\]\['REPO'\] = '$REPO'#" \
+    -e "s#config_opts\['environment'\]\['WRS_GIT_BRANCH'\].*#config_opts\['environment'\]\['WRS_GIT_BRANCH'\] = '$WRS_GIT_BRANCH'#" \
+    -e "s#config_opts\['environment'\]\['CGCS_GIT_BRANCH'\].*#config_opts\['environment'\]\['CGCS_GIT_BRANCH'\] = '$CGCS_GIT_BRANCH'#" \
+    $FILE

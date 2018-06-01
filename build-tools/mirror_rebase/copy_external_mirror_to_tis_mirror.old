@@ -1,0 +1,216 @@
+#!/bin/bash
+
+if [ "$USER" != "jenkins" ]; then
+   echo "ERROR: only jenkins should run this"
+   return 1
+fi
+
+CENTOS_BASE_VERSION=7.2.1511
+EPEL_BASE_VERSION=7
+BIN_ARCH=x86_64
+
+BIN_DIRS="/export/jenkins/mirrors/CentOS/$CENTOS_BASE_VERSION/updates/x86_64
+          /export/jenkins/mirrors/CentOS/$CENTOS_BASE_VERSION/cloud/x86_64/openstack-mitaka
+          /export/jenkins/mirrors/CentOS/$CENTOS_BASE_VERSION/os/x86_64
+          /export/jenkins/mirrors/CentOS/$CENTOS_BASE_VERSION/extras/x86_64
+          /export/jenkins/mirrors/fedora/epel/$EPEL_BASE_VERSION/x86_64
+         "
+SRC_DIRS="/export/jenkins/mirrors/CentOS/vault.centos.org/$CENTOS_BASE_VERSION/updates/Source
+          /export/jenkins/mirrors/CentOS/vault.centos.org/$CENTOS_BASE_VERSION/cloud/Source/openstack-mitaka
+          /export/jenkins/mirrors/CentOS/vault.centos.org/$CENTOS_BASE_VERSION/os/Source
+          /export/jenkins/mirrors/CentOS/vault.centos.org/$CENTOS_BASE_VERSION/extras/Source
+          /export/jenkins/mirrors/fedora/dl.fedoraproject.org/pub/epel/$EPEL_BASE_VERSION/SRPMS
+         "
+TESTING_BIN_DIRS="/export/jenkins/mirrors/fedora/epel/testing/7/x86_64
+                 "
+TESTING_SRC_DIRS="/export/jenkins/mirrors/dl.fedoraproject.org/pub/epel/testing/7/SRPMS
+                 "
+
+ORIG_DIR="/export/jenkins/mirrors/CentOS/tis-r3-CentOS/mitaka"
+NEW_DIR="/export/jenkins/mirrors/CentOS/tis-r3-CentOS/mitaka-2"
+cp -r $ORIG_DIR $NEW_DIR
+
+BIN_DEST="$NEW_DIR/Binary"
+SRC_DEST="$NEW_DIR/Source"
+LOG_DEST="$NEW_DIR/Data"
+DATA_DEST="$NEW_DIR/Data"
+
+rm -rf $LOG_DEST
+mkdir -p $BIN_DEST $SRC_DEST $LOG_DEST
+
+WHITE_LIST_FILE="$DATA_DIR/white_list.txt"
+BLACK_LIST_FILE="$DATA_DIR/black_list.txt"
+OBSOLETE_LOG="$LOG_DEST/obsolete.log"
+NO_SOURCERPM_LOG="$LOG_DEST/no_sourcerpm.log"
+SOURCERPM_NOT_FOUND_LOG="$LOG_DEST/sourcerpm_not_found.log"
+BIN_COPY_LOG="$LOG_DEST/bin_copy.log"
+SRC_COPY_LOG="$LOG_DEST/src_copy.log"
+NO_INSTALLED_COPY="$LOG_DEST/installed_copy.log"
+BLACKLISTED_LOG="$LOG_DEST/blacklisted.log"
+WHITELISTED_LOG="$LOG_DEST/whitelisted.log"
+
+rm -f $OBSOLETE_LOG $NO_SOURCERPM_LOG $SOURCERPM_NOT_FOUND_LOG $BIN_COPY_LOG $SRC_COPY_LOG $NO_INSTALLED_COPY $BLACKLISTED_LOG $WHITELISTED_LOG
+
+LAST_INSTALLED_NAME=""
+LAST_NAME=""
+NAME=""
+
+# The following is similar to a find for *.rpm files,
+# but we transform the path into <name_and_version>#<filename>#<directory_name> .
+# Then do a reverse 'version' sort, so that the newest version
+# of the rpm appears first, no matter what directory it originates from.
+for dat in $((for bd in `echo $BIN_DIRS`; do
+                 for br in $(find $bd/ -name '*.rpm' ); do
+                    d=$(dirname $br)
+                    b=$(basename $br)
+                    s=$(echo $b | sed -e 's#.centos.#.#' -e 's#.el7.#.#'  -e 's#.el7_##' -e 's#.rpm$##' -e 's#.src$##' -e 's#.noarch$##' -e 's#.x86_64$##')
+                    echo "$s#$b#$d"
+                 done
+              done) | sort -r -V)
+do
+   b=$(echo "$dat" | awk -F '#' '{ print $2 }')
+   d=$(echo "$dat" | awk -F '#' '{ print $3 }')
+   br="$d/$b"
+   echo $br
+
+   MATCH=$(grep "^$b" $BLACK_LIST_FILE || true)
+   if [ "$MATCH" != "" ]; then
+      echo "$bs" >> $BLACKLISTED_LOG
+      continue
+   fi
+
+   SOURCERPM=$(rpm -q --queryformat='%{SOURCERPM}' -p $br --nosignature)
+   if [ "x$SOURCERPM" != "x" ]; then
+      MATCH=$(grep "^$SOURCERPM" $BLACK_LIST_FILE || true)
+      if [ "$MATCH" != "" ]; then
+         echo "$bs" >> $BLACKLISTED_LOG
+         echo "$SOURCERPM" >> $BLACKLISTED_LOG
+         continue
+      fi
+   fi
+
+   ARCH=$(rpm -q --queryformat='%{ARCH}' -p $br --nosignature)
+   LAST_NAME="$NAME"
+   NAME=$(rpm -q --queryformat='%{NAME}' -p $br --nosignature)
+   if [ "$NAME" != "$LAST_NAME" ] && [ "$LAST_NAME" != "$LAST_INSTALLED_NAME" ]; then
+      echo "$LAST_NAME" >> $NO_INSTALLED_COPY
+   fi
+   if [ "$ARCH" == "$BIN_ARCH" ] || [ "$ARCH" == "noarch" ]; then
+      if [ "$NAME" != "$LAST_INSTALLED_NAME" ]; then
+         if [ "x$SOURCERPM" != "x" ]; then
+            bs=$(find $SRC_DIRS -name $SOURCERPM | head -n 1)
+            if [ "x$bs" != "x" ]; then
+               mkdir -p $BIN_DEST/$ARCH
+               if [ ! -f $BIN_DEST/$ARCH/$b ]; then
+                  cp -v $br $BIN_DEST/$ARCH/
+                  echo "$br" >> $BIN_COPY_LOG
+               fi
+               if [ ! -f $SRC_DEST/$SOURCERPM ]; then
+                  cp -v $bs $SRC_DEST/
+                  echo "$bs" >> $SRC_COPY_LOG
+               fi
+               LAST_INSTALLED_NAME=$NAME
+            else
+               echo "$SOURCERPM not found"
+               echo "$br" >> $SOURCERPM_NOT_FOUND_LOG
+            fi
+         else
+            echo "no SOURCERPM for $br"
+            echo "$br" >> $NO_SOURCERPM_LOG
+         fi
+      else
+         echo "$br is obsolete"
+         echo "$br" >> $OBSOLETE_LOG
+      fi
+   fi
+done
+
+for dat in $((for bd in $(echo $BIN_DIRS; echo $TESTING_BIN_DIRS); do
+                 for br in $(find $bd/ -name '*.rpm'); do
+                    d=$(dirname $br)
+                    b=$(basename $br)
+                    s=$(echo $b | sed -e 's#.centos.#.#' -e 's#.el7.#.#'  -e 's#.el7_##' -e 's#.rpm$##' -e 's#.src$##' -e 's#.noarch$##' -e 's#.x86_64$##')
+                    echo "$s#$b#$d"
+                 done
+              done) | sort -r -V)
+do
+   b=$(echo "$dat" | awk -F '#' '{ print $2 }')
+   d=$(echo "$dat" | awk -F '#' '{ print $3 }')
+   br="$d/$b"
+   echo $br
+
+   MATCH=$(grep "^$b" $WHITE_LIST_FILE || true)
+   if [ "$MATCH" != "" ]; then
+      echo "$bs" >> $WHITELISTED_LOG
+   else
+      continue
+   fi
+   
+   SOURCERPM=$(rpm -q --queryformat='%{SOURCERPM}' -p $br --nosignature)
+   if [ "x$SOURCERPM" != "x" ]; then
+      grep "^$SOURCERPM" $WHITE_LIST_FILE >> /dev/null || true
+      if [ $? -eq 0 ]; then
+         echo "$bs" >> $WHITELISTED_LOG
+         echo "$SOURCERPM" >> $WHITELISTED_LOG
+      else
+         continue
+      fi
+   fi
+   
+   ARCH=$(rpm -q --queryformat='%{ARCH}' -p $br --nosignature)
+   LAST_NAME="$NAME"
+   NAME=$(rpm -q --queryformat='%{NAME}' -p $br --nosignature)
+   if [ "$NAME" != "$LAST_NAME" ] && [ "$LAST_NAME" != "$LAST_INSTALLED_NAME" ]; then
+      echo "$LAST_NAME" >> $NO_INSTALLED_COPY
+   fi
+   if [ "$ARCH" == "$BIN_ARCH" ] || [ "$ARCH" == "noarch" ]; then
+      if [ "$NAME" != "$LAST_INSTALLED_NAME" ]; then
+         if [ "x$SOURCERPM" != "x" ]; then
+            bs=$(find $SRC_DIRS $TESTING_SRC_DIRS -name $SOURCERPM | head -n 1)
+            if [ "x$bs" != "x" ]; then
+               mkdir -p $BIN_DEST/$ARCH
+               if [ ! -f $BIN_DEST/$ARCH/$b ]; then
+                  cp -v $br $BIN_DEST/$ARCH/
+                  echo "$br" >> $BIN_COPY_LOG
+               fi
+               if [ ! -f $SRC_DEST/$SOURCERPM ]; then
+                  cp -v $bs $SRC_DEST/
+                  echo "$bs" >> $SRC_COPY_LOG
+               fi
+               LAST_INSTALLED_NAME=$NAME
+            else
+               echo "$SOURCERPM not found"
+               echo "$br" >> $SOURCERPM_NOT_FOUND_LOG
+            fi
+         else
+            echo "no SOURCERPM for $br"
+            echo "$br" >> $NO_SOURCERPM_LOG
+         fi
+      else
+         echo "$br is obsolete"
+         echo "$br" >> $OBSOLETE_LOG
+      fi
+   fi
+done
+
+
+TMP_DIR=$(mktemp -d /tmp/copy_external_mirror_to_tis_mirror_XXXXXX)
+if [ $? -ne 0 ]; then
+   echo "Failed to create temporary directory"
+   return 1
+fi
+
+(cd $ORIG_DIR; find . | sort -V > $TMP_DIR/pre)
+(cd $NEW_DIR; find . | sort -V > $TMP_DIR/post)
+echo "Listing deletions"
+diff $TMP_DIR/pre $TMP_DIR/post | grep -v '^< ./Data/' | grep '^<'
+if [ $? -eq 0 ]; then
+   echo
+   echo "Cowardly refusing to alter $ORIG_DIR due to deletions: please see $NEW_DIR"
+   return 1
+fi
+
+mv -f $ORIG_DIR $ORIG_DIR.old
+mv -f $NEW_DIR $ORIG_DIR
+rm -rf $TMP_DIR
+return 0

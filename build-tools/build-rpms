@@ -1,0 +1,34 @@
+#!/bin/bash
+
+# This program is a wrapper around build-rpms-parallel and build-rpms-serial
+
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
+usage () {
+    echo ""
+    echo "Usage: "
+    echo "   Create binary rpms:"
+    echo "   build-rpms [--serial] [args]"
+}
+
+SERIAL_FLAG=0
+
+for arg in "$@"; do
+    case "$1" in
+        --serial) SERIAL_FLAG=1 ;;
+    esac
+done
+
+which mock_tmpfs_umount >> /dev/null
+if [ $? -ne 0 ]; then
+    SERIAL_FLAG=1
+fi
+
+if [ $SERIAL_FLAG -eq 1 ]; then
+    echo "build-rpms-serial $@"
+    build-rpms-serial "$@"
+else
+    echo "build-rpms-parallel $@"
+    build-rpms-parallel "$@"
+fi
+

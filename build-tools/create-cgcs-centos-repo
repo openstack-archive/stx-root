@@ -1,0 +1,54 @@
+#!/bin/bash
+
+DEST_DIR="$MY_REPO/cgcs-centos-repo"
+ORIGIN="$DEST_DIR/origin"
+
+CREATEREPO=$(which createrepo_c)
+if [ $? -ne 0 ]; then
+   CREATEREPO="createrepo"
+fi
+
+if [ ! -f $ORIGIN ]; then
+   echo "ERROR: file not found '$ORIGIN'"
+   exit -1
+fi
+
+ORIGIN_DIR=$(cat $MY_REPO/cgcs-centos-repo/origin | grep -v '^#' | head -n 1)
+
+if [ ! -d $ORIGIN_DIR ]; then
+   echo "ERROR: directory not found '$ORIGIN_DIR'"
+   exit -1
+fi
+
+echo "ORIGIN_DIR=$ORIGIN_DIR"
+for d in $(find $ORIGIN_DIR -type d | tail -n +2); do
+   RELATIVE_DIR=$(echo $d | sed "s#^$ORIGIN_DIR/##")
+   if [ -d $DEST_DIR/$RELATIVE_DIR ]; then
+      rm -rf $DEST_DIR/$RELATIVE_DIR/*
+   fi
+   mkdir -p $DEST_DIR/$RELATIVE_DIR
+done
+
+for d in $(find $ORIGIN_DIR -type d | tail -n +2); do
+   for f in $(find $d -maxdepth 1 -type f); do
+      RELATIVE_FILE=$(echo $f | sed "s#^$ORIGIN_DIR/##")
+      if [ -e "$DEST_DIR/$RELATIVE_FILE" ]; then
+         rm -f "$DEST_DIR/$RELATIVE_FILE"
+      fi
+
+      ln -s $f "$DEST_DIR/$RELATIVE_FILE"
+   done
+done
+
+for d in `find -L $DEST_DIR -type d -name repodata`; do
+   (cd $d/..
+    cp -L -f repodata/*comps*xml comps.xml
+    rm -rf repodata
+    if [ -f comps.xml ]; then
+       $CREATEREPO -g comps.xml --workers $(cat /usr/bin/nproc) $(pwd)
+    else
+       $CREATEREPO --workers $(cat /usr/bin/nproc) $(pwd)
+    fi
+   )
+done
+

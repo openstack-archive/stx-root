@@ -1,0 +1,702 @@
+#!/bin/bash
+
+# Build the export/bootimage.iso file
+#
+# This script uses environment variables to determine the source of
+# packages, and bundles the packages into a bootable .iso
+#
+# It starts by building a basic "vanilla CentOS" ISO, and then adds our
+# packages to it.
+
+usage () {
+    echo ""
+    echo "Usage: "
+    echo "   build-iso [--auto <mode>] [--file <filename>] [--device <device>] [--skip-sign]"
+    echo "   --file <bootimage.iso> destination ISO file"
+    echo "   --auto <controller|cpe> Modify kickstart to auto-install controller or cpe mode"
+    echo "   --device <sda> Use a different boot/rootds device (default is sda)"
+    echo "   --skip-sign do not add file signature to RPMs"
+    echo ""
+}
+
+MY_YUM_CONF=""
+
+NPROCS=$(nproc)
+
+export MOCK=/usr/bin/mock
+
+CREATEREPO=$(which createrepo_c)
+if [ $? -ne 0 ]; then
+   CREATEREPO="createrepo"
+fi
+
+# TEMPORARY: Check for isohybrid now to give a warning about installing pkg
+if [ ! -f /usr/bin/isohybrid ]; then
+    echo "Missing required utility: /usr/bin/isohybrid"
+    echo "Installation of syslinux is required:"
+    echo "    sudo yum install -y syslinux"
+    exit 1
+fi
+
+function install_pkg_list {
+   local PKGLIST=$1
+   if [ "x$PKGLIST" == "x" ]; then
+       return 1
+   fi
+
+   OLD_PWD=$PWD
+
+   echo "Installing packages listed in $PKGLIST and dependancies"
+   \rm -f $OUTPUT_DIR/dist/report_deps.txt
+   $CREATEREPO $CGCS_REPO_DIR
+   $CREATEREPO $CGCS_RT_REPO_DIR
+
+   \cp -v $MY_YUM_CONF $OUTPUT_DIR
+
+   \cd $OUTPUT_DIST_DIR/isolinux/Packages
+   $INTERNAL_REPO_ROOT/build-tools/build_iso/cgts_deps.sh --deps=$PKGLIST
+   
+   if [ $? -ne 0 ]
+   then
+      echo "Could not install dependencies"
+      exit 1
+   fi
+   
+   # clean up
+   echo "Removing local-std yum repo  $CGCS_REPO_DIR/repodata"
+   echo "Removing local-rt yum repo   $CGCS_RT_REPO_DIR/repodata"
+
+   \cd $OLD_PWD
+}
+
+# Generate the report of where all packages come from
+function make_report {
+   local PKGLISTFILES=$@
+   if [ "x$PKGLISTFILES" == "x" ]; then
+       return 1
+   fi
+   echo "MAKING $REPORT_FILE"
+   echo "-----------------" >> $REPORT_FILE
+
+   echo "ISO REPORT" > $REPORT_FILE
+   date >>  $REPORT_FILE
+   echo "-----------------" >> $REPORT_FILE
+
+   echo " " >> $REPORT_FILE
+   echo "-----------------" >> $REPORT_FILE
+   echo "EXPLICIT INCLUDES" >> $REPORT_FILE
+   echo "-----------------" >> $REPORT_FILE
+   for PKGLIST in $PKGLISTFILES; do
+      while read PKG; do
+         PKG=`echo $PKG | sed "s/#.*//"`;
+         if [ "${PKG}x" != "x" ]; then 
+            echo $PKG  >> $REPORT_FILE
+         fi
+      done < $PKGLIST
+   done
+
+   echo " " >> $REPORT_FILE
+   echo "-----------------" >> $REPORT_FILE
+   echo " PACKAGES        " >> $REPORT_FILE
+   echo "-----------------" >> $REPORT_FILE
+   cat $BUILT_REPORT | sort | uniq >> $REPORT_FILE
+
+   echo " " >> $REPORT_FILE
+   echo "-----------------" >> $REPORT_FILE
+   echo " WARNINGS        " >> $REPORT_FILE
+   echo "-----------------" >> $REPORT_FILE
+   
+   # Note that the warnings file may have multiple lines for the same
+   # missing dependency.  A sort | uniq solves this so we don't duplicate
+   # warnings
+   cat $WARNINGS_REPORT | sort | uniq >> $REPORT_FILE
+
+   echo "ISO REPORT: $REPORT_FILE"
+}
+
+function init_vars {
+   #####################################
+   # Input definitions
+
+   # Where all CentOS packages live
+   # Where essential CentOS (minimal install) packages live
+   INTERNAL_REPO_ROOT=
+   # Where our own packages live
+   CGCS_REPO_DIR=$MY_WORKSPACE/std/rpmbuild/RPMS
+   CGCS_RT_REPO_DIR=$MY_WORKSPACE/rt/rpmbuild/RPMS
+
+   MY_YUM_CONF=$(create-yum-conf)
+   if [ $? -ne 0 ]; then
+      echo "ERROR: create-yum-conf failed"
+      exit 1
+   fi
+
+   DISTRO_REPO_DIR=$(for d in $(grep baseurl $MY_YUM_CONF | grep file: | awk -F : '{print $2}' | sed 's:///:/:g'); do if [ -d $d/images ]; then echo $d ;fi; done)
+
+   #####################################
+   # Output definitons
+
+   # where to put stuff (curent dir unless MY_WORKSPACE defined)
+   OUTPUT_DIR="$PWD/export"   
+   if [ ! -z "$MY_WORKSPACE" ] && [ -d "$MY_WORKSPACE" ] ; then
+       OUTPUT_DIR="$MY_WORKSPACE/export"
+       CGCS_REPO_DIR="$MY_WORKSPACE/std/rpmbuild/RPMS"
+       CGCS_RT_REPO_DIR="$MY_WORKSPACE/rt/rpmbuild/RPMS"
+   fi
+
+   # Directory in which to populate files to be distributed
+   if [ $CUMULUS -eq 0 ]; then
+      OUTPUT_DIST_DIR=$OUTPUT_DIR/dist
+   else
+      OUTPUT_DIST_DIR=$OUTPUT_DIR/dist-cumulus
+   fi
+
+   # Package disc image
+   OUTPUT_FILE=$OUTPUT_DIR/$DEST_FILE
+
+   # Generate an error if the output file is below this threshold
+   MINIMUM_EXPECTED_SIZE=500000000
+
+
+   # report variables
+   REPORT_FILE=$OUTPUT_DIR/report.txt
+   BUILT_REPORT=$OUTPUT_DIR/local.txt
+   CLOUD_REPORT=$OUTPUT_DIR/cloud.txt
+   CLOUD_COMMON_REPORT=$OUTPUT_DIR/cloudcommon.txt
+   CENTOS_REPORT=$OUTPUT_DIR/centos.txt
+   EPEL_REPORT=$OUTPUT_DIR/epel.txt
+   WARNINGS_REPORT=$OUTPUT_DIR/warnings.txt
+
+   \rm -f $REPORT_FILE
+   \rm -f $BUILT_REPORT
+   \rm -f $CLOUD_REPORT
+   \rm -f $CLOUD_COMMON_REPORT
+   \rm -f $CENTOS_REPORT
+   \rm -f $WARNINGS_REPORT
+}
+
+# check input variables
+function check_vars {
+   # Where to store data
+   printf "Finding cgcs-root\n"
+   printf "  Checking \$MY_REPO (value \"$MY_REPO\")\n"
+
+   if [ ! -z "$MY_REPO" ] && [ -d "$MY_REPO" ] ; then
+      INTERNAL_REPO_ROOT=$MY_REPO
+      printf "  Found!\n"
+   fi
+
+   if [ -z "$INTERNAL_REPO_ROOT" ] ; then
+      printf "  No joy -- checking \$MY_REPO_ROOT_DIR (value \"$MY_REPO_ROOT_DIR\")\n"
+      if [ ! -z "$MY_REPO_ROOT_DIR" ] && [ -d "$MY_REPO_ROOT_DIR/cgcs-root" ] ; then
+          INTERNAL_REPO_ROOT=$MY_REPO_ROOT_DIR/cgcs-root
+          printf "  Found!\n"
+      fi
+   fi
+
+   if [ -z "$INTERNAL_REPO_ROOT" ] ; then
+      printf "  No joy -- checking for \$MY_WORKSPACE/cgcs-root\n"
+      if [ -d "$MY_WORKSPACE/cgcs-root" ] ; then
+          INTERNAL_REPO_ROOT=$MY_WORKSPACE/cgcs-root
+          printf "  Found!\n"
+      fi
+   fi
+
+   if [ -z "$INTERNAL_REPO_ROOT" ] ; then
+      printf "  Error -- could not locate cgcs-root repo.\n"
+      exit 1
+   fi
+
+   printf "\nChecking that we can access $DISTRO_REPO_DIR\n"
+   if [ ! -d "$DISTRO_REPO_DIR" ] ; then
+      printf "  Error -- could not access $DISTRO_REPO_DIR\n"
+      exit 1
+   fi
+
+   if [ ! -e "$DISTRO_REPO_DIR/repodata" ] ; then
+      printf "  Error -- $DISTRO_REPO_DIR is there, but does not seem sane\n"
+   fi
+
+   printf "\nOkay, input looks fine...\n\n"
+   printf "Creating output directory $OUTPUT_DIST_DIR\n"
+   if [ $CLEAN_FLAG -eq 1 ]; then
+      echo "  Cleaning..."
+      if [ -e $OUTPUT_DIST_DIR ] ; then
+         chmod -R a+w $OUTPUT_DIST_DIR
+         \rm -rf $OUTPUT_DIST_DIR
+      fi
+      if [ -e $OUTPUT_DIST_DIR ] ; then
+         printf "Error: could not remove old $OUTPUT_DIST_DIR\n"
+         exit 1
+      fi
+   fi
+
+   \mkdir -p $OUTPUT_DIST_DIR
+   if [ ! -d $OUTPUT_DIST_DIR ] ; then
+      printf "Error: could not create $OUTPUT_DIST_DIR\n"
+      exit 1
+   fi
+
+   RELEASE_INFO=$INTERNAL_REPO_ROOT/addons/wr-cgcs/layers/cgcs/middleware/recipes-common/build-info/release-info.inc
+   export PLATFORM_RELEASE=$(source $RELEASE_INFO && echo $PLATFORM_RELEASE)
+
+   echo "  Done"
+   echo ""
+}
+
+function init_output_dir {
+   echo "Creating base output directory in $OUTPUT_DIST_DIR"
+   \mkdir -p $OUTPUT_DIST_DIR/isolinux/images
+   \mkdir -p $OUTPUT_DIST_DIR/isolinux/ks
+   \mkdir -p $OUTPUT_DIST_DIR/isolinux/LiveOS
+   \mkdir -p $OUTPUT_DIST_DIR/isolinux/Packages
+   \mkdir -p $OUTPUT_DIST_DIR/utils
+
+   \mkdir -p $OUTPUT_DIST_DIR/isolinux/EFI
+   # This directory will contains files required for the PXE network installer
+   \mkdir -p $OUTPUT_DIST_DIR/isolinux/pxeboot
+
+   echo "  Copying base files"
+
+   # Generate .discinfo file
+   date +%s.%N > $OUTPUT_DIST_DIR/isolinux/.discinfo
+   echo $PLATFORM_RELEASE >> $OUTPUT_DIST_DIR/isolinux/.discinfo
+   echo "x86_64" >> $OUTPUT_DIST_DIR/isolinux/.discinfo
+   
+   \cp -L -ru $DISTRO_REPO_DIR/isolinux/* $OUTPUT_DIST_DIR/isolinux/
+   \cp -L -ru $DISTRO_REPO_DIR/images/pxeboot $OUTPUT_DIST_DIR/isolinux/images/
+
+   echo "  Installing startup files"
+
+   \cp -L $INTERNAL_REPO_ROOT/addons/wr-cgcs/layers/cgcs/mwa-beas/bsp-files/centos.syslinux.cfg $OUTPUT_DIST_DIR/isolinux/syslinux.cfg
+   \cp -L $INTERNAL_REPO_ROOT/addons/wr-cgcs/layers/cgcs/mwa-beas/bsp-files/centos.syslinux.cfg $OUTPUT_DIST_DIR/isolinux/isolinux.cfg
+   sed -i 's/wr_usb_boot/oe_iso_boot/' $OUTPUT_DIST_DIR/isolinux/isolinux.cfg
+
+   # Modify the isolinux.cfg to auto install if requested
+   # Option 0 is Controller(serial). Option 2 is CPE serial.
+   if [ "$AUTO_INSTALL" == "controller" ] ; then
+       echo "Modifying ISO to auto-install controller load"
+       perl -p -i -e 's/timeout 0/timeout 1\ndefault 0/'  $OUTPUT_DIST_DIR/isolinux/isolinux.cfg
+   elif [ "$AUTO_INSTALL" == "cpe" ] ; then
+       echo "Modifying ISO to auto-install CPE (combined load)"
+       perl -p -i -e 's/timeout 0/timeout 1\ndefault 2/'  $OUTPUT_DIST_DIR/isolinux/isolinux.cfg
+   fi
+
+   # Modify the device if requested
+   if [ ! -z "$DEVICE" ] ; then
+       echo "Modifying ISO to use device $DEVICE"
+       perl -p -i -e "s/device=sda/device=${DEVICE}/g"  $OUTPUT_DIST_DIR/isolinux/isolinux.cfg
+   fi
+
+
+
+   # Copy UEFI files 
+   \cp -L -ru $DISTRO_REPO_DIR/EFI/* $OUTPUT_DIST_DIR/isolinux/EFI/
+   \cp -L $INTERNAL_REPO_ROOT/addons/wr-cgcs/layers/cgcs/mwa-beas/bsp-files/grub.cfg $OUTPUT_DIST_DIR/isolinux/EFI/BOOT/grub.cfg
+   \cp -L $INTERNAL_REPO_ROOT/addons/wr-cgcs/layers/cgcs/mwa-beas/bsp-files/pxeboot_grub.cfg $OUTPUT_DIST_DIR/isolinux/pxeboot/pxeboot_grub.cfg
+
+   # Update the efiboot.img (See https://wiki.archlinux.org/index.php/Remastering_the_Install_ISO)
+   # We need to mount the image file, replace the grub.cfg file with the Titanium Cloud one, and unmount.
+   # Script update-efiboot-image will do this. If there is not loop device on the build machine
+   # then this script must be executed manually prior.
+
+   if [ ! -e "/dev/loop-control"  -a ! -f "$OUTPUT_DIR/efiboot.img" ]; then
+      CMD="export PROJECT=$PROJECT; \
+           export SRC_BUILD_ENVIRONMENT=$SRC_BUILD_ENVIRONMENT; \
+           export MY_BUILD_ENVIRONMENT=$MY_BUILD_ENVIRONMENT; \
+           export MY_BUILD_ENVIRONMENT_FILE=$MY_BUILD_ENVIRONMENT_FILE; \
+           export MY_BUILD_DIR=$MY_BUILD_DIR; \
+           export MY_WORKSPACE=$MY_WORKSPACE; \
+           export MY_REPO=$MY_REPO; \
+           export MY_BUILD_CFG=$MY_BUILD_CFG; \
+           export MY_MOCK_ROOT=$MY_MOCK_ROOT; \
+           export PATH=$MY_REPO/build-tools:\$PATH; \
+           update-efiboot-image"
+
+      if [ "$HOSTNAME" == "yow-cgts3-centos7" ]; then
+         echo "Attempting to run update-efiboot-image on yow-cgts3-lx"
+         ssh -o StrictHostKeyChecking=no yow-cgts3-lx "$CMD"
+         if [ $? -ne 0 ]; then
+            echo "Failed to run update-efiboot-image on yow-cgts3-lx"
+         fi
+      fi
+
+      if [ "$HOSTNAME" == "yow-cgts2-centos7" ]; then
+         echo "Attempting to run update-efiboot-image on yow-cgts2-lx"
+         ssh -o StrictHostKeyChecking=no yow-cgts2-lx "$CMD"
+         if [ $? -ne 0 ]; then
+            echo "Failed to run update-efiboot-image on yow-cgts2-lx"
+         fi
+      fi
+   fi
+
+   if [ ! -e "/dev/loop-control"  -a ! -f "$OUTPUT_DIR/efiboot.img" ]; then
+      printf "\n**************************************************************************************************** \n"
+      printf "No loop device on this machine. Please ensure $OUTPUT_DIR/efiboot.img \n"
+      printf "exist prior to executing build-iso by.  It can be created by running \n"
+      printf "   $INTERNAL_REPO_ROOT/build-tools/update-efiboot-image \n"
+      printf "on a machine that does support a loop device.  Please ensure all standard \n"
+      printf "build environment variables are defined (e.g. MY_REPO, MY_WORKSPACE, etc.). \n"
+      printf " \n"
+      printf "e.g. If building on yow-cgts3-centos7, you'll want to run the script on \n"
+      printf "     yow-cgts3-lx which shares the same file system, but supports loop devices \n"
+      printf "****************************************************************************************************** \n"
+      exit 1
+   fi
+
+   if [ -f "$OUTPUT_DIR/efiboot.img" ]; then
+
+      # The script update-efiboot-image was run outside the build-iso script, do nothing.
+      printf "  The image file $OUTPUT_DIR/efiboot.img already exist\n"
+   else
+      printf "  The image file $OUTPUT_DIR/efiboot.img does not exist \n"
+      if [ ! -f "$INTERNAL_REPO_ROOT/build-tools/update-efiboot-image" ]; then
+          printf "*** Error: script update-efiboot-image does not exist *** \n"
+          exit 1
+      fi
+
+      # Run the script
+      $INTERNAL_REPO_ROOT/build-tools/update-efiboot-image
+      RET=$?
+      if [ $RET != 0 ]; then
+          printf "*** Error: update-efiboot-image script returned failure $RET *** \n"
+          exit 1
+      fi
+
+   fi
+
+   \cp -L $OUTPUT_DIR/efiboot.img $OUTPUT_DIST_DIR/isolinux/images/
+   \rm -f $OUTPUT_DIR/efiboot.img
+
+   # Copy and set up pxeboot setup files
+   \cp $INTERNAL_REPO_ROOT/addons/wr-cgcs/layers/cgcs/mwa-beas/bsp-files/pxeboot_setup.sh $OUTPUT_DIST_DIR/isolinux/pxeboot_setup.sh
+   \cp $INTERNAL_REPO_ROOT/addons/wr-cgcs/layers/cgcs/mwa-beas/bsp-files/pxeboot.cfg $OUTPUT_DIST_DIR/isolinux/pxeboot/pxeboot.cfg
+   chmod +x $OUTPUT_DIST_DIR/isolinux/pxeboot_setup.sh
+
+   \rm -f $OUTPUT_DIST_DIR/comps.xml
+   \cp -L $INTERNAL_REPO_ROOT/build-tools/build_iso/comps.xml.gz $OUTPUT_DIST_DIR/
+   gunzip $OUTPUT_DIST_DIR/comps.xml.gz
+
+   TMP_DIR=$MY_WORKSPACE/tmp
+   \mkdir -p $TMP_DIR
+   TMPDIR=$TMP_DIR yum clean all -c $MY_YUM_CONF
+   \rm -rf $TMP_DIR/yum-$USER-*
+   echo "  Done"
+   echo ""
+}
+
+function final_touches {
+   OLD_PWD=$PWD
+
+   # Update the comps.xml
+   if [ ! -f $OUTPUT_DIST_DIR/comps.xml.bak ]; then
+      \cp $OUTPUT_DIST_DIR/comps.xml $OUTPUT_DIST_DIR/comps.xml.bak
+   fi
+
+   python $INTERNAL_REPO_ROOT/addons/wr-cgcs/layers/cgcs/mwa-beas/bsp-files/platform_comps.py \
+      --pkgdir $OUTPUT_DIST_DIR/isolinux/Packages \
+      --groups $OUTPUT_DIST_DIR/comps.xml
+   if [ $? -ne 0 ]; then
+      echo "Failed to update comps.xml"
+      exit 1
+   fi
+
+   # create the repo
+   \cd $OUTPUT_DIST_DIR/isolinux
+   $CREATEREPO -q -g ../comps.xml .
+   
+   # build the ISO
+   printf "Building image $OUTPUT_FILE\n"
+   \cd $OUTPUT_DIST_DIR
+   chmod 664 isolinux/isolinux.bin
+   mkisofs -o $OUTPUT_FILE \
+      -R -D -A 'oe_iso_boot' -V 'oe_iso_boot' \
+      -quiet \
+      -b isolinux.bin -c boot.cat -no-emul-boot \
+      -boot-load-size 4 -boot-info-table \
+      -eltorito-alt-boot \
+      -e images/efiboot.img \
+            -no-emul-boot \
+      isolinux/   
+
+   isohybrid --uefi $OUTPUT_FILE
+   implantisomd5 $OUTPUT_FILE
+
+   \cd $OLD_PWD
+}
+
+function extract_pkg_from_local_repo {
+   local repodir=$1
+   local pkgname=$2
+
+   local pkgfile=$(repoquery --repofrompath local,${repodir} --location -q ${pkgname})
+   if [ -z "${pkgfile}" ]; then
+      echo "Could not find package $pkgname in $repodir"
+      exit 1
+   fi
+
+   rpm2cpio ${pkgfile/file://} | cpio -idmv
+   if [ $? -ne 0 ]; then
+      echo "Failed to extract files from ${pkgfile/file://}"
+      exit 1
+   fi
+}
+
+function extract_installer_files {
+   # Changes to copied files here must also be reflected in patch-iso
+
+   CGCSDIR=$INTERNAL_REPO_ROOT/addons/wr-cgcs/layers/cgcs
+   PKGDIR=$OUTPUT_DIST_DIR/isolinux/Packages
+
+   (
+   \cd $OUTPUT_DIR
+   \rm -rf kickstarts extra_cfgs kickstart.work
+   \mkdir kickstarts extra_cfgs kickstart.work
+
+   echo "Retrieving kickstarts..."
+
+   \cd kickstart.work
+
+   extract_pkg_from_local_repo ${CGCS_REPO_DIR} platform-kickstarts
+   extract_pkg_from_local_repo ${CGCS_REPO_DIR} platform-kickstarts-pxeboot
+   extract_pkg_from_local_repo ${CGCS_REPO_DIR} platform-kickstarts-extracfgs
+
+   \cp --preserve=all www/pages/feed/rel-*/*.cfg pxeboot/*.cfg ../kickstarts/ &&
+   \cp --preserve=all extra_cfgs/*.cfg ../extra_cfgs/
+   if [ $? -ne 0 ]; then
+      echo "Failed to copy extracted kickstarts"
+      exit 1
+   fi
+
+   \cd ..
+
+   # Copy kickstarts to ISO
+   \cp --preserve=all kickstarts/controller_ks.cfg $OUTPUT_DIST_DIR/isolinux/ks.cfg
+   # Modify the kickstart to shutdown instead of reboot if doing an auto install
+   if [ ! -z "$AUTO_INSTALL" ] ; then
+      sed -i 's/^reboot --eject/shutdown/' $OUTPUT_DIST_DIR/isolinux/ks.cfg
+   fi
+
+   \mv kickstarts/pxeboot* $OUTPUT_DIST_DIR/isolinux/pxeboot/
+   \cp --preserve=all kickstarts/* $OUTPUT_DIST_DIR/isolinux
+
+   # Update OAM interface for cumulus auto install
+   if [ $CUMULUS -eq 1 ]; then
+       # Cumulus wants tty1
+       perl -p -i -e 's/console=tty0/console=tty1/'  $OUTPUT_DIST_DIR/isolinux/isolinux.cfg
+
+       # CUMULUS setup scripts specify ens3 for OAM
+       OAM_IFNAME=ens3
+
+       cat <<EOM >> $OUTPUT_DIST_DIR/isolinux/ks.cfg
+%post
+#For cumulus tis on tis automated install
+cat << EOF > /etc/sysconfig/network-scripts/ifcfg-${OAM_IFNAME}
+IPADDR=10.10.10.3
+NETMASK=255.255.255.0
+BOOTPROTO=static
+ONBOOT=yes
+DEVICE=${OAM_IFNAME}
+MTU=1500
+GATEWAY=10.10.10.1
+EOF
+%end
+EOM
+   fi
+
+   # For PXE boot network installer
+
+   echo ${OUTPUT_DIST_DIR}/isolinux/Packages
+
+   local WORKDIR=pxe-network-installer.content
+   local ORIG_PWD=$PWD
+
+   \rm -rf $WORKDIR
+   \mkdir $WORKDIR
+   \cd $WORKDIR
+
+   extract_pkg_from_local_repo ${CGCS_REPO_DIR} pxe-network-installer
+   extract_pkg_from_local_repo ${CGCS_REPO_DIR} grub2-efi-pxeboot
+
+   \mkdir -p $OUTPUT_DIST_DIR/isolinux/pxeboot/EFI/centos/x86_64-efi
+
+   \cp --preserve=all pxeboot/pxelinux.0 pxeboot/menu.c32 pxeboot/chain.c32 $OUTPUT_DIST_DIR/isolinux/pxeboot &&
+   \cp --preserve=all pxeboot/EFI/centos/x86_64-efi/* $OUTPUT_DIST_DIR/isolinux/pxeboot/EFI/centos/x86_64-efi/ &&
+   \cp --preserve=all pxeboot/EFI/grubx64.efi $OUTPUT_DIST_DIR/isolinux/pxeboot/EFI/
+   if [ $? -ne 0 ]; then
+      echo "Error: Could not copy all files from installer"
+      exit 1
+   fi
+   
+   \cp --preserve=all www/pages/feed/rel-*/LiveOS/squashfs.img $OUTPUT_DIST_DIR/isolinux/LiveOS
+   if [ $? -ne 0 ]; then
+      echo "Error: Could not copy squashfs from LiveOS"
+      exit 1
+   fi
+
+
+   # Replace vmlinuz and initrd.img with our own pre-built ones
+   \rm -f \
+      $OUTPUT_DIST_DIR/isolinux/vmlinuz \
+      $OUTPUT_DIST_DIR/isolinux/images/pxeboot/vmlinuz \
+      $OUTPUT_DIST_DIR/isolinux/initrd.img \
+      $OUTPUT_DIST_DIR/isolinux/images/pxeboot/initrd.img
+   \cp --preserve=all pxeboot/rel-*/installer-bzImage_1.0 \
+      $OUTPUT_DIST_DIR/isolinux/vmlinuz &&
+   \cp --preserve=all pxeboot/rel-*/installer-bzImage_1.0 \
+      $OUTPUT_DIST_DIR/isolinux/images/pxeboot/vmlinuz &&
+   \cp --preserve=all pxeboot/rel-*/installer-intel-x86-64-initrd_1.0 \
+      $OUTPUT_DIST_DIR/isolinux/initrd.img &&
+   \cp --preserve=all pxeboot/rel-*/installer-intel-x86-64-initrd_1.0 \
+      $OUTPUT_DIST_DIR/isolinux/images/pxeboot/initrd.img
+
+   if [ $? -ne 0 ]; then
+      echo "Error: Failed to copy installer images"
+      exit 1
+   fi
+
+   \cd $ORIG_PWD
+   \rm -rf $WORKDIR
+   )
+   if [ $? -ne 0 ]; then
+      exit 1
+   fi
+}
+
+function setup_upgrades_files {
+   # Changes to copied files here must also be reflected in patch-iso
+
+   # Copy the upgrade files
+   UPGRADES_DIR="$OUTPUT_DIST_DIR/isolinux/upgrades"
+   \rm -rf $UPGRADES_DIR
+   \mkdir -p $UPGRADES_DIR
+   \cp $INTERNAL_REPO_ROOT/addons/wr-cgcs/layers/cgcs/mwa-beas/bsp-files/upgrades/*  $UPGRADES_DIR
+   sed -i "s/xxxSW_VERSIONxxx/${PLATFORM_RELEASE}/g" $UPGRADES_DIR/metadata.xml
+   chmod +x $UPGRADES_DIR/*.sh
+   # Write the version out (used in upgrade scripts - this is the same as SW_VERSION)
+   echo "VERSION=$PLATFORM_RELEASE" > $UPGRADES_DIR/version
+}
+
+function sign_iso {
+    # Sign the .iso with the developer private key
+    # Sigining with the formal key is only to be done for customer release
+    # builds
+    local isofilename=$(basename $OUTPUT_DIR/$DEST_FILE)
+    local isofilenoext="${isofilename%.*}"
+    openssl dgst -sha256 -sign ${MY_REPO}/build-tools/signing/dev-private-key.pem -binary -out $OUTPUT_DIR/$isofilenoext.sig $OUTPUT_DIR/$DEST_FILE
+}
+
+#############################################
+# Main code
+#############################################
+
+# Check args
+HELP=0
+CLEAN_FLAG=1 # TODO -- doesn't yet work without --clean
+DEST_FILE=bootimage.iso
+AUTO_FLAG=0
+AUTO_INSTALL=""
+CUMULUS=0
+SIGN_RPM_FILES=1
+DEVICE=""
+
+# read the options
+TEMP=`getopt -o hf:a:d: --long help,file:,auto:,device:,cumulus,clean,skip-sign -n 'test.sh' -- "$@"`
+eval set -- "$TEMP"
+
+# extract options and their arguments into variables.
+while true ; do
+    case "$1" in
+        -h|--help) HELP=1 ; shift ;;
+        --clean) CLEAN_FLAG=1 ; shift ;;
+        --skip-sign) SIGN_RPM_FILES=0 ; shift ;;
+        --cumulus) CUMULUS=1 ; shift ;;
+        -f | --file) DEST_FILE="$2"; shift; shift ;;
+        -d | --device) DEVICE="$2"; shift; shift ;;
+        -a | --auto) AUTO_FLAG=1; AUTO_INSTALL="$2"; shift; shift ;;
+        --) shift ; break ;;
+        *) echo "Internal error!" ; exit 1 ;;
+    esac
+done
+
+if [ $AUTO_FLAG -eq 1 ]; then
+    if [[ "$AUTO_INSTALL" != "controller" && "$AUTO_INSTALL" != "cpe" ]] ; then
+            echo "Unsupported --auto value: $AUTO_INSTALL"
+            exit 1
+    fi
+fi
+
+if [ $HELP -eq 1 ]; then
+   usage
+   exit 0
+fi
+
+
+(
+printf "\n*************************\n"
+printf   "Create Titanium Cloud/CentOS Boot CD\n"
+printf   "*************************\n\n"
+
+# Init variables
+init_vars
+check_vars
+PKGLIST_MINIMAL=$INTERNAL_REPO_ROOT/build-tools/build_iso/minimal_rpm_list.txt
+PKGLIST_TI=$INTERNAL_REPO_ROOT/build-tools/build_iso/image.inc
+PKGLIST_DEV=$INTERNAL_REPO_ROOT/build-tools/build_iso/image-dev.inc
+
+# Create skeleton build dir
+init_output_dir
+
+# Create the vanilla DVD
+echo "Copying vanilla CentOS RPMs"
+install_pkg_list $PKGLIST_MINIMAL
+
+# Find all CGCS packages
+# SAL exit 0
+echo "Installing Titanium Cloud packages"
+install_pkg_list $PKGLIST_TI
+if [ $? -eq 2 ]; then
+	exit 1
+fi
+if [ "x${RELEASE_BUILD}" == "x" ]; then
+    echo "Installing Titanium Cloud developer packages"
+    install_pkg_list ${PKGLIST_DEV}
+    if [ $? -eq 2 ]; then
+        exit 1
+    fi
+fi
+
+# Extract installer files
+extract_installer_files
+
+# Upgrades files
+setup_upgrades_files
+
+# add file signatures to all rpms
+if [ $SIGN_RPM_FILES -ne 0 ]; then
+    sign-rpms -d $OUTPUT_DIST_DIR/isolinux/Packages
+    if [ $? -ne 0 ] ; then
+	echo "failed to add file signatures to RPMs"
+	exit 1
+    fi
+fi
+
+# Finalize and build ISO
+final_touches
+
+# Sign the ISO
+sign_iso
+
+make_report $PKGLIST_MINIMAL $PKGLIST_TI
+
+# Check sanity
+FILESIZE=$(wc -c <"$OUTPUT_FILE")
+if [ $FILESIZE -ge $MINIMUM_EXPECTED_SIZE ]; then
+	printf "Done."
+        printf "Output file: $OUTPUT_FILE\n\n"
+else
+	printf "Output file $OUTPUT_FILE smaller than expected -- probable error\n\n"
+	exit 1
+fi
+
+) 2>&1 | stdbuf -o0 awk '{ print strftime("%H:%M:%S"), $0; fflush(); }' ; exit ${PIPESTATUS[0]}

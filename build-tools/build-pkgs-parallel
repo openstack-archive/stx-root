@@ -1,0 +1,370 @@
+#!/bin/bash
+
+# This program is a wrapper around build-srpms-parallel and build-rpms-parallel
+
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
+usage () {
+    echo ""
+    echo "Usage: "
+    echo "   Create source and Binary rpms:"
+    echo "   Build optimizations (--no-descendants, --no-required, --no-build-info,"
+    echo "   --no-autoclean) are not recommended for the first build after a clone/pull,"
+    echo "   nor the final build prior to creating an iso or patch, but can be used"
+    echo "   for intermediate builds.  i.e. while debugging compilation failures." 
+    echo "      build-pkgs-parallel [--no-descendants] [--no-required] [--no-build-info] [--no-autoclean] [--careful] [--formal] [ list of package names ]"
+    echo ""
+    echo "   Delete source rpms, and the directories associated with it's creation:"
+    echo "   Note: does not clean an edit environment"
+    echo "      build-pkgs-parallel --clean [ list of package names ]"
+    echo ""
+    echo "   Extract an src.rpm into a pair of git trees to aid in editing it's contents,"
+    echo "   one for source code and one for metadata such as the spec file."
+    echo "   If --no-meta-patch is specified, then WRS patches are omitted."
+    echo "      build-pkgs-parallel --edit [--no-meta-patch] [ list of package names ]"
+    echo ""
+    echo "   Delete an edit environment"
+    echo "      build-pkgs-parallel --edit --clean [ list of package names ]"
+    echo ""
+    echo "   This help page"
+    echo "      build-pkgs-parallel [--help]"
+    echo ""
+}
+
+
+HELP=0
+CLEAN_FLAG=0
+EDIT_FLAG=0
+STD_BUILD=1
+RT_BUILD=1
+INSTALLER_BUILD=0
+
+# read the options
+TEMP=$(getopt -o h --long rt,std,installer,edit,no-meta-patch,no-descendants,no-required,no-build-info,no-autoclean,formal,careful,help,clean -n 'build-pkgs-parallel' -- "$@")
+if [ $? -ne 0 ]; then
+    usage
+    exit 0
+fi
+eval set -- "$TEMP"
+
+# extract options and their arguments into variables.
+EXTRA_ARGS_COMMON=""
+EXTRA_ARGS_SRPM=""
+EXTRA_ARGS_RPM=""
+while true ; do
+    case "$1" in
+        --no-descendants) EXTRA_ARGS_COMMON+=" --no-descendants" ; shift ;;
+        --formal)         EXTRA_ARGS_COMMON+=" --formal" ; shift ;;
+        --careful)        EXTRA_ARGS_RPM+=" --careful" ; shift ;;
+        --no-required)    EXTRA_ARGS_RPM+=" --no-required" ; shift ;;
+        --no-build-info)  EXTRA_ARGS_COMMON+=" --no-build-info" ; shift ;;
+        --no-autoclean)   EXTRA_ARGS_RPM+=" --no-autoclean" ; shift ;;
+        --no-meta-patch)  EXTRA_ARGS_SRPM+=" --no-meta-patch" ; shift ;;
+        -h|--help)        HELP=1 ; shift ;;
+        --clean)          CLEAN_FLAG=1 ; shift ;;
+        --edit)           EDIT_FLAG=1 ; EXTRA_ARGS_SRPM+=" --edit"; shift ;;
+        --rt)             STD_BUILD=0 ; shift ;;
+        --std)            RT_BUILD=0 ; shift ;;
+        --installer)      INSTALLER_BUILD=1 ; STD_BUILD=0 ; RT_BUILD=0 ; shift ;;
+        --)               shift ; break ;;
+        *)                usage; exit 1 ;;
+    esac
+done
+
+if [ $HELP -eq 1 ]; then
+    usage
+    exit 0
+fi
+
+function my_exit() {
+    build-rpms-parallel --std --tmpfs-clean
+    build-rpms-parallel --rt --tmpfs-clean
+}
+
+function my_sigint() {
+    echo "build-pkgs-parallel sigint"
+    pkill -SIGABRT -P $BASHPID &> /dev/null
+    echo "build-pkgs-parallel waiting"
+    wait
+    echo "build-pkgs-parallel wait complete"
+
+}
+
+function my_sighup() {
+    echo "build-pkgs-parallel sighup"
+    pkill -SIGABRT -P $BASHPID &> /dev/null
+    echo "build-pkgs-parallel waiting"
+    wait
+    echo "build-pkgs-parallel wait complete"
+}
+
+function my_sigabrt() {
+    echo "build-pkgs-parallel sigabrt"
+    pkill -SIGABRT -P $BASHPID &> /dev/null
+    echo "build-pkgs-parallel waiting"
+    wait
+    echo "build-pkgs-parallel wait complete"
+}
+
+function my_sigterm() {
+    echo "build-pkgs-parallel sigterm"
+    pkill -SIGABRT -P $BASHPID &> /dev/null
+    echo "build-pkgs-parallel waiting"
+    wait
+    echo "build-pkgs-parallel wait complete"
+}
+
+trap my_exit EXIT
+trap my_sigint INT
+trap my_sighup HUP
+trap my_sigabrt ABRT
+trap my_sigterm TERM
+
+TARGETS=" $@ "
+TARGETS_STD=" "
+TARGETS_RT=" "
+TARGETS_INSTALLER=" "
+TARGETS_MISC=" "
+
+find_targets () {
+   local centos_pkg_dirs=$1
+   local d=""
+   local d2=""
+   local g=""
+   local x=""
+   local name=""
+   local path=""
+   local RESULT=" "
+   local FOUND=0
+
+   for g in $(find $MY_REPO -type d -name .git); do
+      d=$(dirname $g)
+      if [ -f $d/$centos_pkg_dirs ]; then
+         for d2 in $(grep -v '^#' $d/$centos_pkg_dirs); do
+            name=""
+            if [ -f $d/$d2/centos/srpm_path ]; then
+                path=$(cat $d/$d2/centos/srpm_path | head -n 1 | sed "s#^mirror:CentOS/tis-r3-CentOS/mitaka#$MY_REPO/cgcs-centos-repo#" | sed "s#^mirror:#$MY_REPO/cgcs-centos-repo/#" | sed "s#^repo:#$MY_REPO/#" | sed "s#^3rd_party:#$MY_REPO/cgcs-3rd-party-repo/#" | sed "s#^Source/#$MY_REPO/cgcs-centos-repo/Source/#")
+                name=$(rpm -q --qf='%{NAME}' --nosignature -p $path)
+            else
+                path=$(find $d/$d2/centos/ -name '*.spec' | head -n 1)
+                if [[ ( -z "$path" ) &&  ( -f $d/$d2/centos/spec_path ) ]]; then
+                    path=$(find $MY_REPO/$(cat $d/$d2/centos/spec_path) -maxdepth 1 -name '*.spec' | head -n 1)
+                fi
+                if [ "$path" != "" ]; then
+                   name=$(spec_find_tag Name "$path" 2>> /dev/null)
+                fi
+            fi
+            if [ "$name" != "" ]; then
+               if [ "$BUILD_TYPE" == "rt" ]; then
+                  FOUND=0
+                  for x in $TARGETS; do
+                     if [ "${x: -3}" == "-rt" ]; then
+                        if [ "${name}" == "$x" ] || [ "${name}-rt" == "${x}" ]; then
+                           RESULT+="$x "
+                           FOUND=1
+                           break
+                        fi
+                     fi
+                  done
+                  if [ $FOUND -eq 0 ]; then
+                     for x in $TARGETS; do
+                        if [ "${name}" == "${x}-rt" ]; then
+                           RESULT+="$x-rt "
+                           FOUND=1
+                           break
+                        else
+                           if [ "${name}" == "$x" ] || [ "${name}-rt" == "${x}" ]; then
+                              RESULT+="$x "
+                              FOUND=1
+                              break
+                           fi
+                        fi
+                     done
+                  fi
+               else
+                  for x in $TARGETS; do
+                     if [ "${name}" == "$x" ]; then
+                         RESULT+="$x "
+                         FOUND=1
+                         break
+                     fi
+                  done
+               fi
+            fi
+         done
+      fi
+   done
+
+   echo "$RESULT"
+   return 0
+}
+
+echo "CLEAN_FLAG=$CLEAN_FLAG"
+echo "EDIT_FLAG=$EDIT_FLAG"
+
+if [ "x$TARGETS" != "x  " ]; then
+   source $MY_REPO/build-tools/spec-utils
+   TARGETS_STD="$(find_targets centos_pkg_dirs)"
+
+   BUILD_TYPE_SAVE="$BUILD_TYPE"
+   BUILD_TYPE="rt"
+   TARGETS_RT="$(find_targets centos_pkg_dirs_rt)"
+   BUILD_TYPE="$BUILD_TYPE_SAVE"
+
+   echo "TARGETS_STD=$TARGETS_STD"
+   echo "TARGETS_RT=$TARGETS_RT"
+
+   for x in $TARGETS; do
+       if [[ $TARGETS_STD == *" $x "* ]]
+       then
+           echo "found $x" >> /dev/null;
+       else
+           if [[ $TARGETS_RT == *" $x "* ]]
+           then
+               echo "found $x" >> /dev/null;
+           else
+               TARGETS_MISC+="$x "
+           fi
+       fi
+   done
+fi
+
+echo "EXTRA_ARGS_COMMON='$EXTRA_ARGS_COMMON'"
+echo "EXTRA_ARGS_SRPM='$EXTRA_ARGS_SRPM'"
+echo "EXTRA_ARGS_RPM='$EXTRA_ARGS_RPM'"
+echo "TARGETS='$TARGETS'"
+echo "TARGETS_STD='$TARGETS_STD'"
+echo "TARGETS_RT='$TARGETS_RT'"
+echo "TARGETS_MISC='$TARGETS_MISC'"
+
+if [ $CLEAN_FLAG -eq 1 ]; then
+   if [ $STD_BUILD -eq 1 ]; then
+      if [ "x$TARGETS" == "x  " ] || [ "$TARGETS_STD" != " " ] || [ "$TARGETS_MISC" != " " ]; then
+         if [ $EDIT_FLAG -ne 1 ]; then
+            echo "$DIR/build-rpms-parallel --std --clean $EXTRA_ARGS_COMMON $EXTRA_ARGS_RPM $TARGETS_STD $TARGETS_MISC"
+            $DIR/build-rpms-parallel --std --clean $EXTRA_ARGS_COMMON $EXTRA_ARGS_RPM $TARGETS_STD $TARGETS_MISC || exit 1
+         fi
+      fi
+      if [ "x$TARGETS" == "x  " ] || [ "$TARGETS_STD" != " " ] || [ "$TARGETS_MISC" != " " ]; then
+         echo "$DIR/build-srpms-parallel --std --clean $EXTRA_ARGS_COMMON $EXTRA_ARGS_SRPM $TARGETS_STD $TARGETS_MISC"
+         $DIR/build-srpms-parallel --std --clean $EXTRA_ARGS_COMMON $EXTRA_ARGS_SRPM $TARGETS_STD $TARGETS_MISC || exit 1
+      fi
+   fi
+   if [ $RT_BUILD -eq 1 ]; then
+      if [ "x$TARGETS" == "x  " ] || [ "$TARGETS_RT" != " " ] || [ "$TARGETS_MISC" != " " ]; then
+         if [ $EDIT_FLAG -ne 1 ]; then
+            echo "$DIR/build-rpms-parallel --rt --clean $EXTRA_ARGS_COMMON $EXTRA_ARGS_RPM $TARGETS_RT $TARGETS_MISC"
+            $DIR/build-rpms-parallel --rt --clean $EXTRA_ARGS_COMMON $EXTRA_ARGS_RPM $TARGETS_RT $TARGETS_MISC || exit 1
+         fi
+      fi
+      if [ "x$TARGETS" == "x  " ] || [ "$TARGETS_RT" != " " ] || [ "$TARGETS_MISC" != " " ]; then
+         echo "$DIR/build-srpms-parallel --rt --clean $EXTRA_ARGS_COMMON $EXTRA_ARGS_SRPM $TARGETS_RT $TARGETS_MISC"
+         $DIR/build-srpms-parallel --rt --clean $EXTRA_ARGS_COMMON $EXTRA_ARGS_SRPM $TARGETS_RT $TARGETS_MISC || exit 1
+      fi
+   fi
+   exit $?
+fi
+
+function launch_build()
+{
+   local build_type=$1
+   shift
+
+   local logfile=$MY_WORKSPACE/build-$build_type.log
+   local rc
+   local targets
+
+   if [ "$build_type" == "std" ]; then
+      targets="$TARGETS_STD $TARGETS_MISC"
+   else
+      if [ "$build_type" == "rt" ]; then
+         targets="$TARGETS_RT $TARGETS_MISC"
+      else
+         if [ "$build_type" == "installer" ]; then
+            targets="$TARGETS_INSTALLER $TARGETS_MISC"
+         else
+            targets="$TARGETS"
+         fi
+      fi
+   fi
+
+   echo "Launching $build_type build, logging to $logfile"
+   \rm $logfile
+
+   echo -e "\n######## $(date): Launching build-srpms-parallel --$build_type $EXTRA_ARGS $@\n" | tee --append $logfile
+   # No clean flag, call build-srpms-parallel followed by build-rpms-parallel
+   echo "$DIR/build-srpms-parallel --$build_type $EXTRA_ARGS_COMMON $EXTRA_ARGS_SRPM $targets" | tee --append $logfile
+   $DIR/build-srpms-parallel --$build_type $EXTRA_ARGS_COMMON $EXTRA_ARGS_SRPM $targets 2>&1 | tee --append $logfile
+   rc=${PIPESTATUS[0]}
+   if [ $rc -eq 0 ]; then
+      echo -e "\n######## $(date): build-srpm-parallel --$build_type was successful" | tee --append $logfile
+   else
+      echo -e "\n######## $(date): build-srpm-parallel --$build_type failed with rc=$rc" | tee --append $logfile
+      echo -e "\n$(date): build-srpm-parallel --$build_type failed with rc=$rc"
+      exit $rc
+   fi
+
+   if [ $EDIT_FLAG -ne 1 ]; then
+      echo -e "\n######## $(date): Launching build-rpms-parallel --$build_type $EXTRA_ARGS $@\n" | tee --append $logfile
+      echo "$DIR/build-rpms-parallel --$build_type $EXTRA_ARGS_COMMON $EXTRA_ARGS_RPM $targets" | tee --append $logfile
+      $DIR/build-rpms-parallel --$build_type $EXTRA_ARGS_COMMON $EXTRA_ARGS_RPM $targets 2>&1 | tee --append $logfile
+      rc=${PIPESTATUS[0]}
+      if [ $rc -eq 0 ]; then
+         echo -e "\n######## $(date): build-rpm-parallel --$build_type was successful" | tee --append $logfile
+      else
+         echo -e "\n######## $(date): build-rpm-parallel --$build_type failed with rc=$rc" | tee --append $logfile
+         echo -e "\n$(date): build-rpm-parallel --$build_type failed with rc=$rc"
+         exit $rc
+      fi
+   fi
+
+   echo -e "\n$(date): $build_type complete\n"
+   #exit $rc
+}
+
+function progbar()
+{
+   while :; do
+      for s in / - \\ \|; do
+         printf "\r$s"
+         sleep .5
+      done
+   done
+}
+
+# Create $MY_WORKSPACE if it doesn't exist already
+mkdir -p $MY_WORKSPACE
+
+if [ $STD_BUILD -eq 1 ]; then
+   if [ "x$TARGETS" == "x  " ] || [ "$TARGETS_STD" != " " ] || [ "$TARGETS_MISC" != " " ]; then
+      launch_build std
+   else
+      echo "Skipping 'std' build, no valid targets in list: $TARGETS"
+   fi
+else
+   echo "Skipping 'std' build"
+fi
+if [ $RT_BUILD -eq 1 ]; then
+   if [ "x$TARGETS" == "x  " ] || [ "$TARGETS_RT" != " " ] || [ "$TARGETS_MISC" != " " ]; then
+      launch_build rt
+   else
+      echo "Skipping 'rt' build, no valid targets in list: $TARGETS"
+   fi
+else
+   echo "Skipping 'rt' build"
+fi
+if [ $INSTALLER_BUILD -eq 1 ]; then
+   if [ "x$TARGETS" == "x  " ] || [ "$TARGETS_INSTALLER" != " " ] || [ "$TARGETS_MISC" != " " ]; then
+      launch_build installer
+   else
+      echo "Skipping 'installer' build, no valid targets in list: $TARGETS"
+   fi
+else
+   echo "Skipping 'installer' build"
+fi
+
+
+echo "All builds were successful"
+
+exit 0
+

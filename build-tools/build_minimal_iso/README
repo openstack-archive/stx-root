@@ -1,0 +1,112 @@
+This document describes how to generate a DVD image (.iso) which installs
+a minimal CentOS installation where the entirety of the installed system is
+build from the provided source.
+
+There are three parts to this document:
+  How to build binary RPMs from source RPMS
+  How to build the install disk from the binary RPMS
+  How to install the minimal system
+
+-------------------------------------------------------------------------------
+How to build the binary RPMs from the source RPMS
+-------------------------------------------------------------------------------
+
+(note - building the binary RPMs is expected to take a long time, ~ 15 hours
+on a typical system)
+
+The source RPMs in the "srcs" subdirectory are compiled in an environment
+called "mock" which builds each package in a chroot jail to ensure the output
+is not influenced by the build system.  Mock is controlled by a config file.
+The example srcs/build.cfg is provided as a starting point, however it does
+to be adjusted for your build environment.  In particular, the paths and repo
+locations need to be configured for your system.  It is highly recommended that
+a local mirror of the CentOS repos be used for speed.  The example config file
+is configured to use an localhost http mirror of the CentOS repos.
+
+To build the binary RPMs from the source RPMs change to the "srcs" subdirectory
+and execute the "build.sh" script.
+
+# cd srcs
+# ./build.sh
+
+This will use build.cfg and mock to compile every source RPM listed in list.txt.
+The output binary RPMs will be in srcs/results.  There will also be success.txt
+and fail.txt files which list any RPMs that failed to build.  Debugging why RPMs
+fail to build is beyond the scope of this document, however be aware that RPMs
+often fail in the "check" phase of the build (i.e. the package compiled fine
+but tests failed).  Notably, the python package may fail due to a "test_nis"
+failure, and the "attr" and "e2fsprogs" packages may or may not fail depending
+on the host file system used for compilation.  These failures may or may not be
+false positives (for example, the mock environment does not have NIS configured
+which is why python's test_nis reports a failure -- the code is actually fine,
+we just can't run the test in the mock environment).
+
+To disable the check phase, add the line
+
+config_opts['rpmbuild_opts'] = '--nocheck'
+
+to build.cfg.  You can then run build.sh again with list.txt containing
+packages which failed:
+
+# cp list.txt list.txt.orig
+# cp fail.txt list.txt
+# ./build.sh
+
+-------------------------------------------------------------------------------
+How to build the install disk from the binary RPMS
+-------------------------------------------------------------------------------
+
+Once srcs/results is populated with binary RPMs, an installation disk can be
+built.  Edit the yum.conf file and place an (arbitrary) path for yum log and
+cache locations, and make sure that the repository path points to srcs/results.
+Run the build_centos.sh script to build the installation DVD:
+
+# ./build_centos.sh
+
+Scroll up the output to the top of the "Spawning worker" messages.  You should
+observe a line indicating that there are no remaining unresolved dependencies:
+
+...
+Installing PKG=dhcp-common PKG_FILE=dhcp-common-4.2.5-42.el7.centos.tis.1.x86_64.rpm PKG_REL_PATH=dhcp-common-4.2.5-42.el7.centos.tis.1.x86_64.rpm PKG_PATH=/localdisk/loadbuild/jmckenna/centos/srcs/results/dhcp-common-4.2.5-42.el7.centos.tis.1.x86_64.rpm from repo local-std
+dhcp-common
+Debug: Packages still unresolved:
+
+Spawning worker 0 with 4 pkgs
+Spawning worker 1 with 4 pkgs
+Spawning worker 2 with 4 pkgs
+...
+
+This is your confirmation that all required pacakges were found and installed
+on the ISO.  You should also now see a new file called "centosIso.iso":
+
+# ls -l centosIso.iso
+
+-------------------------------------------------------------------------------
+How to install the minimal system
+-------------------------------------------------------------------------------
+
+The centosIso.iso file can be burned to a DVD or booted in a virtual
+environment.  It is configured to self-install on boot.  After installation,
+a user with sudo access must be created manually.  The system can then be
+booted.
+
+Power the system on with the DVD inserted.  A system install will take place
+(takes approximately 2 minutes).  The system will then report an error and
+ask you if you wish to report a bug, debug, or quit.  Hit control-alt-F2 to
+switch to a terminal window.  Enter the following commands to change to the
+installed system root, and create a (wrsroot) with sudo access:
+
+cd /mnt/sysimage
+chroot .
+groupadd -r wrs
+groupadd -f -g 345 wrs_protected
+useradd -m -g wrs -G root,wrs_protected,wheel -d /home/wrsroot -p cBglipPpsKwBQ -s /bin/sh wrsroot
+exit
+
+Change back to the main window with control-alt-F1.
+Hit 3 <enter> (the "Quit" option).  The system will reboot (make sure you eject
+the DVD or use your BIOS to boot from hard disk rather than DVD; the installer
+will re-run if the DVD boots again).
+
+You can log into the system as user "wrsroot" with password "wrsroot".
+

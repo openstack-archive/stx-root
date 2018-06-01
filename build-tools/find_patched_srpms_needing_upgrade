@@ -1,0 +1,54 @@
+#!/bin/bash
+
+for f in `find $MY_REPO -name srpm_path`; do
+   orig_line=`cat $f`
+   first=`echo $orig_line | awk -F : '{print $1}'`
+   orig_path="/import/mirrors/$orig_line"
+   if [ "$first" == "mirror" ]; then
+      orig_path="/import/mirrors/"$(echo $orig_line | awk -F : '{print $2}');
+   fi
+   if [ "$first" == "repo" ]; then
+      orig_path="$MY_REPO/"$(echo $orig_line | awk -F : '{print $2}')
+      continue
+   fi
+
+   if [ ! -f $orig_path ]; then
+      echo "ERROR: bad srpm path: '$orig_path' derived from '$f'"
+      exit 1
+   fi
+
+   orig_dir=$(dirname $orig_path)
+   repodata_dir=$orig_dir/repodata
+   if [ ! -d $repodata_dir ]; then
+      repodata_dir=$orig_dir/../repodata
+      if [ ! -d $repodata_dir ]; then
+         repodata_dir=$orig_dir/../../repodata
+         if [ ! -d $repodata_dir ]; then
+            echo "ERROR: couldn't find repodata for '$orig_path'"
+            exit 1
+         fi
+      fi
+   fi
+
+   # echo "'$orig_path' -> '$repodata_dir'"
+   name=$(rpm -q --queryformat '%{NAME}\n' -p $orig_path 2>> /dev/null)
+   version=$(rpm -q --queryformat '%{VERSION}\n' -p $orig_path 2>> /dev/null)
+   release=$(rpm -q --queryformat '%{RELEASE}\n' -p $orig_path 2>> /dev/null)
+   orig_name=$(basename $orig_path)
+   best_name="$orig_name"
+   for n in `find $orig_dir -name $name-*`; do
+      if [ "$n" != "$orig_path" ]; then
+         new_name=$(rpm -q --queryformat '%{NAME}\n' -p $n)
+         if [ "$name" == "$new_name" ]; then
+            rpmdev-vercmp $(basename $n) $best_name >> /dev/null
+            if [ $? -eq 11 ]; then
+               best_name=$(basename $n)
+            fi
+         fi
+      fi
+   done
+   if [ "$best_name" != "$orig_name" ]; then
+      echo "$f: $orig_name ==> $best_name"
+   fi
+done
+
