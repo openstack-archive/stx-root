@@ -33,7 +33,6 @@ iscsi-initiator-utils
 iscsi-initiator-utils-iscsiuio
 kmod-drbd
 libevent
-libtrap-handler
 libvirt-docs
 libvirt-python
 logrotate
