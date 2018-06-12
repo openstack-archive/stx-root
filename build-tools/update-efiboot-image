@@ -15,28 +15,6 @@
 
 MY_YUM_CONF=""
 
-
-# Note:
-# This needs to be in /usr/local/bin and /usr/local/bin needs to come first in path list.
-# this file is a mod of $MY_REPO/build-tools/update-efiboot-image. The original requires
-# a fully working udev with we don't have in the container. I use sudo instead.
-
-# shadowing the file fails since the WR stuff carefully recreates a local path before invocation.
-# sigh...
-# added instructions to rm and ln -s to this one in the README
-
-# check for changes to the original, since we are shadowing...
-#ORIG_SUM="2df81b2461ea358b24df77f7539d7fb4"
-#TEST_SUM=$(md5sum $MY_REPO/build-tools/update-efiboot-image | awk '{print $1}')
-#if [ "$TEST_SUM" != "$ORIG_SUM" ]; then
-#    echo "The original build-tools/update-efiboot-image has changed or is missing. May need mods to this file!"
-#    echo "Desired sum = $ORIG_SUM"
-#    echo "Actual  sum = $TEST_SUM"
-#    exit 1
-#fi
-
-#printf "  Shadowing update-efiboot-image with the sudo centric one from /usr/local/bin due to lack of udev \n"
-
 function setup_env_vars  {
     mkdir -p $MY_WORKSPACE/export/
 
@@ -86,7 +64,7 @@ function setup_env_vars  {
 
 setup_env_vars
 
-printf "  Calling update-efibot-image\n"
+printf "  Calling $(basename $0)\n"
 MOUNT_LOG_FILE=$OUTPUT_DIR/mounts_used.log
 
 # Clear old image file
@@ -99,37 +77,59 @@ cp -L -u $DISTRO_REPO_DIR/images/efiboot.img $OUTPUT_DIR/
 
 printf "  Replacing the efiboot.img grub.cfg file with the Titanium Cloud one\n"
 
-#RET=$(udisksctl loop-setup -f $OUTPUT_DIR/efiboot.img --no-user-interaction)
-RET=$(sudo losetup --show -f $OUTPUT_DIR/efiboot.img)
+# We can either use udev or sudo to mount loopback device, etc.
+# This is controlled via env variable
 
-if [ -z "$RET" ] ; then
-  printf "  Error: failed sudo losetup command.\n"
-  exit 1
+if [ 0${BUILD_ISO_USE_UDEV} -eq 1 ]; then
+    RET=$(udisksctl loop-setup -f $OUTPUT_DIR/efiboot.img --no-user-interaction)
+    if [ $? -ne 0 ]; then
+      printf "  Error: failed udev loop-setup command.\n"
+      exit 1
+    fi
+    LOOP=$(echo $RET | awk '{print $5;}' | sed -e 's/\.//g')
+else
+    # no udev - use losetup command
+    # retcode is the lo device used
+    RET=$(sudo losetup --show -f $OUTPUT_DIR/efiboot.img)
+    if [ -z "$RET" ] ; then
+      printf "  Error: failed sudo losetup command.\n"
+      exit 1
+    fi
+
+    # Save the loop device used into a file
+    echo $(date) $RET >> $MOUNT_LOG_FILE
+
+    LOOP=$(echo $RET)
+    if [ -z $LOOP ] ; then
+      printf "  Error: failed losetup  command.\n"
+      exit 1
+    fi
 fi
 
-printf "  $RET\n"
-
-# Save the loop device used into a file
-echo $(date) $RET >> $MOUNT_LOG_FILE
-
-#LOOP=$(echo $RET | awk '{print $5;}' | sed -e 's/\.//g')
-LOOP=$(echo $RET)
-if [ -z $LOOP ] ; then
-  printf "  Error: failed losetup  command.\n"
-  exit 1
+# Mount the filesystem
+if [ 0${BUILD_ISO_USE_UDEV} -eq 1 ]; then
+    udisksctl mount -b $LOOP
+    EFI_MOUNT=$(udisksctl info -b $LOOP | grep MountPoints | awk '{print $2;}')
+else
+    EFI_MOUNT=$(sudo mktemp -d -p /mnt -t EFI-noudev.XXXXXX)
+    sudo mount $LOOP $EFI_MOUNT
 fi
 
-EFI_MOUNT=$(sudo mktemp -d -p /mnt -t EFI-noudev.XXXXXX)
-sudo mount $LOOP $EFI_MOUNT
-#udisksctl mount -b $LOOP
-#EFI_MOUNT=$(udisksctl info -b $LOOP | grep MountPoints | awk '{print $2;}')
 if [ -z $EFI_MOUNT ] ; then
   printf "  Error: failed mount command.\n"
   exit 1
 fi
 
+# Several commands may need to be executed with sudo if we're not using
+# udev.  Use a variable to hold the optional "sudo" part
+if [ 0${BUILD_ISO_USE_UDEV} -eq 1 ]; then
+    SUDOPREFIX=""
+else
+    SUDOPREFIX="sudo"
+fi
+
 # Update the vanilla UEFI Centos grub.cfg with the Titanium Cloud version
-sudo cp $INTERNAL_REPO_ROOT/addons/wr-cgcs/layers/cgcs/common-bsp/files/grub.cfg  $EFI_MOUNT/EFI/BOOT/grub.cfg
+${SUDOPREFIX} cp $INTERNAL_REPO_ROOT/addons/wr-cgcs/layers/cgcs/mwa-beas/bsp-files/grub.cfg  $EFI_MOUNT/EFI/BOOT/grub.cfg
 
 # Update the grub and shim executables with the Titanium Cloud signed versions
 #
@@ -141,23 +141,27 @@ GRUBPKG=`find $MY_WORKSPACE/std/rpmbuild/RPMS/grub2-efi-[0-9]*.x86_64.rpm`
 
 pushd $TMPDIR >/dev/null
 rpm2cpio $SHIMPKG | cpio -id --quiet
-sudo find . -name "shim.efi" | xargs -I '{}' sudo cp '{}' $EFI_MOUNT/EFI/BOOT/BOOTX64.EFI
+${SUDOPREFIX} find . -name "shim.efi" | xargs -I '{}' ${SUDOPREFIX} cp '{}' $EFI_MOUNT/EFI/BOOT/BOOTX64.EFI
 rm -rf *
 
 rpm2cpio $GRUBPKG | cpio -id --quiet
-sudo find . -name "grubx64.efi" | xargs -I '{}' sudo cp '{}' $EFI_MOUNT/EFI/BOOT/grubx64.efi
+${SUDOPREFIX} find . -name "grubx64.efi" | xargs -I '{}' ${SUDOPREFIX} cp '{}' $EFI_MOUNT/EFI/BOOT/grubx64.efi
 popd >/dev/null
 rm -rf $TMPDIR
 
 # Create a directory for Secure Boot certificate
-sudo mkdir -p $EFI_MOUNT/CERTS
-sudo cp $INTERNAL_REPO_ROOT/build-tools/certificates/* $EFI_MOUNT/CERTS
+${SUDOPREFIX} mkdir -p $EFI_MOUNT/CERTS
+${SUDOPREFIX} cp $INTERNAL_REPO_ROOT/build-tools/certificates/* $EFI_MOUNT/CERTS
 
 # Cleanup mounts
-sudo umount $LOOP
-#udisksctl unmount -b $LOOP
-RET=$(sudo losetup -d $LOOP)
-#RET=$(udisksctl loop-delete -b $LOOP)
+if [ 0${BUILD_ISO_USE_UDEV} -eq 1 ]; then
+    udisksctl unmount -b $LOOP
+    RET=$(udisksctl loop-delete -b $LOOP)
+else
+    sudo umount $LOOP
+    RET=$(sudo losetup -d $LOOP)
+fi
+
 echo $(date) Deleted $LOOP. $RET >> $MOUNT_LOG_FILE
-sudo rmdir $EFI_MOUNT
+${SUDOPREFIX} rmdir $EFI_MOUNT
 exit 0
