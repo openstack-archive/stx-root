@@ -11,11 +11,19 @@
 usage () {
     echo ""
     echo "Usage: "
-    echo "   build-iso [--auto <mode>] [--file <filename>] [--device <device>] [--skip-sign]"
+    echo "   build-iso [--auto <mode>] [--file <filename>] "
+    echo "             [--device <device>] [--skip-sign]"
+    echo "             [--sudo|udev]"
     echo "   --file <bootimage.iso> destination ISO file"
-    echo "   --auto <controller|cpe> Modify kickstart to auto-install controller or cpe mode"
+    echo "   --auto <controller|cpe> Modify kickstart to auto-install controller or cpe"
+    echo "                           mode"
     echo "   --device <sda> Use a different boot/rootds device (default is sda)"
     echo "   --skip-sign do not add file signature to RPMs"
+    echo "   --sudo Use \"sudo\" command to access EFI image filesystem (default)"
+    echo "   --udev Use udev to access EFI image filesystem"
+    echo ""
+    echo "   Note that environment variable BUILD_ISO_USE_UDEV=1 will have the same effect"
+    echo "     as the --udev option"
     echo ""
 }
 
@@ -311,7 +319,9 @@ function init_output_dir {
            export MY_BUILD_CFG=$MY_BUILD_CFG; \
            export MY_MOCK_ROOT=$MY_MOCK_ROOT; \
            export PATH=$MY_REPO/build-tools:\$PATH; \
+           export BUILD_ISO_USE_UDEV=$BUILD_ISO_USE_UDEV; \
            update-efiboot-image"
+      echo $CMD
 
       if [ "$HOSTNAME" == "yow-cgts3-centos7" ]; then
          echo "Attempting to run update-efiboot-image on yow-cgts3-lx"
@@ -356,7 +366,7 @@ function init_output_dir {
       fi
 
       # Run the script
-      $INTERNAL_REPO_ROOT/build-tools/update-efiboot-image
+      BUILD_ISO_USE_UDEV=$BUILD_ISO_USE_UDEV $INTERNAL_REPO_ROOT/build-tools/update-efiboot-image
       RET=$?
       if [ $RET != 0 ]; then
           printf "*** Error: update-efiboot-image script returned failure $RET *** \n"
@@ -599,9 +609,12 @@ AUTO_INSTALL=""
 CUMULUS=0
 SIGN_RPM_FILES=1
 DEVICE=""
+if [ -z "$BUILD_ISO_USE_UDEV" ]; then
+    BUILD_ISO_USE_UDEV=0
+fi
 
 # read the options
-TEMP=`getopt -o hf:a:d: --long help,file:,auto:,device:,cumulus,clean,skip-sign -n 'test.sh' -- "$@"`
+TEMP=`getopt -o hf:a:d: --long help,file:,auto:,device:,cumulus,clean,skip-sign,sudo,udev -n 'test.sh' -- "$@"`
 eval set -- "$TEMP"
 
 # extract options and their arguments into variables.
@@ -614,6 +627,8 @@ while true ; do
         -f | --file) DEST_FILE="$2"; shift; shift ;;
         -d | --device) DEVICE="$2"; shift; shift ;;
         -a | --auto) AUTO_FLAG=1; AUTO_INSTALL="$2"; shift; shift ;;
+        --sudo) BUILD_ISO_USE_UDEV=0 ; shift ;;
+        --udev) BUILD_ISO_USE_UDEV=1 ; shift ;;
         --) shift ; break ;;
         *) echo "Internal error!" ; exit 1 ;;
     esac
