@@ -376,6 +376,7 @@ kubernetes-node
 etcd
 docker-distribution
 helm
+docker-forward-journald
 # Add debugging tools
 perf
 zip
