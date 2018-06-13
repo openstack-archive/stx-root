@@ -121,8 +121,6 @@ openstack-aodh-notifier
 python-ceilometer
 #openstack-ceilometer-alarm provided in openstack-aodh-compat package
 openstack-aodh-compat
-openstack-ceilometer-api
-openstack-ceilometer-collector
 openstack-ceilometer-common
 openstack-ceilometer-ipmi
 openstack-ceilometer-notification
@@ -382,3 +380,12 @@ perf
 zip
 unzip
 traceroute
+
+#gnocchi
+gnocchi-api
+gnocchi-common
+gnocchi-metricd
+gnocchi-statsd
+python-gnocchi
+python2-gnocchiclient
+puppet-gnocchi
