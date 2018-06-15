@@ -357,6 +357,8 @@ python-lefthandclient
 python-3parclient
 ntfs-3g
 ntfsprogs
+memcached
+python-memcached
 
 # Add debugging tools
 perf
