@@ -4,10 +4,9 @@ import xml.etree.ElementTree as ET
 import fnmatch
 import os
 import gzip
-import getopt
 import sys
 import string
-
+from optparse import OptionParser
 
 ns = { 'root': 'http://linux.duke.edu/metadata/common',
        'filelists': 'http://linux.duke.edu/metadata/filelists',
@@ -30,7 +29,6 @@ if not os.path.isdir(repodata_dir):
 
 publish_cache_dir="%s/cgcs-tis-repo/dependancy-cache" % os.environ['MY_REPO']
 centos_repo_dir="%s/cgcs-centos-repo" % os.environ['MY_REPO']
-third_party_repo_dir="%s/cgcs-3rd-party-repo" % os.environ['MY_REPO']
 tis_repo_dir="%s/cgcs-tis-repo" % os.environ['MY_REPO']
 workspace_repo_dirs={}
 for rt in rpm_types:
@@ -46,10 +44,6 @@ if not os.path.isdir(centos_repo_dir):
    print("ERROR: directory not found %s" % centos_repo_dir)
    sys.exit(1)
 
-if not os.path.isdir(third_party_repo_dir):
-   print("ERROR: directory not found %s" % third_party_repo_dir)
-   sys.exit(1)
-
 if not os.path.isdir(tis_repo_dir):
    print("ERROR: directory not found %s" % tis_repo_dir)
    sys.exit(1)
@@ -62,24 +56,31 @@ if not os.path.isdir(tis_repo_dir):
 #                         "%s/CentOS/vault.centos.org/7.2.1511" % repodata_dir, 
 #                         "%s/CentOS/tis-r3/Source" % repodata_dir ]
 
-bin_rpm_mirror_roots = ["%s/Binary" % centos_repo_dir,
-                        "%s/Binary" % third_party_repo_dir ]
-
-src_rpm_mirror_roots = ["%s/Source" % centos_repo_dir,
-                        "%s/Source" % third_party_repo_dir ]
+bin_rpm_mirror_roots = ["%s/Binary" % centos_repo_dir]
+src_rpm_mirror_roots = ["%s/Source" % centos_repo_dir]
 
 for bt in build_types:
    bin_rpm_mirror_roots.append(workspace_repo_dirs['RPM'][bt])
    src_rpm_mirror_roots.append(workspace_repo_dirs['SRPM'][bt])
 
-short_options=''
-long_options=[ 'cache_dir=' ]
+parser = OptionParser('create_dependancy_cache')
+parser.add_option('-c', '--cache_dir', action='store', type='string',
+    dest='cache_dir', help='set cache directory')
+parser.add_option('-t', '--third_party_repo_dir', action='store',
+    type='string', dest='third_party_repo_dir',
+    help='set third party directory')
+(options, args) = parser.parse_args()
 
-options, remainder = getopt.getopt(sys.argv[1:], short_options, long_options)
+if options.cache_dir:
+    publish_cache_dir = options.cache_dir
 
-for opt, arg in options:
-    if opt in ('--cache_dir'):
-        publish_cache_dir = arg
+if options.third_party_repo_dir:
+    third_party_repo_dir = options.third_party_repo_dir
+    bin_rpm_mirror_roots.append(third_party_repo_dir)
+    src_rpm_mirror_roots.append(third_party_repo_dir)
+    if not os.path.isdir(third_party_repo_dir):
+        print("ERROR: directory not found %s" % third_party_repo_dir)
+        sys.exit(1)
 
 if not os.path.isdir(publish_cache_dir):
     print("ERROR: directory not found %s" % publish_cache_dir)
