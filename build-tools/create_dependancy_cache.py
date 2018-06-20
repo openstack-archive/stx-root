@@ -30,7 +30,6 @@ if not os.path.isdir(repodata_dir):
 
 publish_cache_dir="%s/cgcs-tis-repo/dependancy-cache" % os.environ['MY_REPO']
 centos_repo_dir="%s/cgcs-centos-repo" % os.environ['MY_REPO']
-third_party_repo_dir="%s/cgcs-3rd-party-repo" % os.environ['MY_REPO']
 tis_repo_dir="%s/cgcs-tis-repo" % os.environ['MY_REPO']
 workspace_repo_dirs={}
 for rt in rpm_types:
@@ -46,10 +45,6 @@ if not os.path.isdir(centos_repo_dir):
    print("ERROR: directory not found %s" % centos_repo_dir)
    sys.exit(1)
 
-if not os.path.isdir(third_party_repo_dir):
-   print("ERROR: directory not found %s" % third_party_repo_dir)
-   sys.exit(1)
-
 if not os.path.isdir(tis_repo_dir):
    print("ERROR: directory not found %s" % tis_repo_dir)
    sys.exit(1)
@@ -62,12 +57,9 @@ if not os.path.isdir(tis_repo_dir):
 #                         "%s/CentOS/vault.centos.org/7.2.1511" % repodata_dir, 
 #                         "%s/CentOS/tis-r3/Source" % repodata_dir ]
 
-bin_rpm_mirror_roots = ["%s/Binary" % centos_repo_dir,
-                        "%s/Binary" % third_party_repo_dir ]
+bin_rpm_mirror_roots = ["%s/Binary" % centos_repo_dir]
 
-src_rpm_mirror_roots = ["%s/Source" % centos_repo_dir,
-                        "%s/Source" % third_party_repo_dir ]
-
+src_rpm_mirror_roots = ["%s/Source" % centos_repo_dir]
 for bt in build_types:
    bin_rpm_mirror_roots.append(workspace_repo_dirs['RPM'][bt])
    src_rpm_mirror_roots.append(workspace_repo_dirs['SRPM'][bt])
