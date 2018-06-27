@@ -360,6 +360,14 @@ ntfsprogs
 memcached
 python-memcached
 
+# kubernetes packages
+docker-ce
+kubernetes
+kubernetes-client
+kubernetes-kubeadm
+kubernetes-master
+kubernetes-node
+etcd
 # Add debugging tools
 perf
 zip
