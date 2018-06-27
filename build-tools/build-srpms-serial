@@ -18,7 +18,7 @@ DEFAULT_SRPM_SCRIPT="$DIR/default_$SRPM_SCRIPT"
 SCRIPT_PATH="$DISTRO"
 DATA_PATH="$DISTRO"
 FILES_PATH="$DISTRO/files"
-# ORIG_SPECS_PATH="$DISTRO/rpmbuild/SPECS"
+PATCHES_PATH="$DISTRO/patches"
 ORIG_SPECS_PATH="$DISTRO"
 SRPM_LIST_PATH="$DISTRO/srpm_path"
 MIRROR_ROOT="$MY_REPO/cgcs-centos-repo"
@@ -209,8 +209,10 @@ fi
 export CCACHE_DIR="$BUILD_ROOT/.ccache"
 export SRC_BASE="$SRC_ROOT"
 export CGCS_BASE="$SRC_BASE/addons/wr-cgcs/layers/cgcs"
+export STX_BASE="$CGCS_BASE"
 export SPECS_BASE="$ORIG_SPECS_PATH"
 export FILES_BASE="$FILES_PATH"
+export PATCHES_BASE="$PATCHES_PATH"
 
 export BUILD_BASE="$BUILD_ROOT"
 BUILD_INPUTS="$BUILD_BASE/inputs"
@@ -995,8 +997,9 @@ if [ $EDIT_FLAG -eq 0 ]; then
     fi
 fi
 
-for g in `find $SRC_BASE -type d -name .git | sort -V`; do
+for g in `find "$SRC_BASE" -type d -name .git | sort -V`; do
    GIT_ROOT=$(dirname $g)
+   export GIT_BASE="$GIT_ROOT"
    for p in $(cat $GIT_ROOT/$PKG_DIRS_FILE 2>> /dev/null); do
       src_dir="$GIT_ROOT/$p"
       if [ -d $src_dir ]; then
