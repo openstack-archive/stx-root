@@ -62,6 +62,8 @@ function setup_env_vars  {
     fi
 }
 
+printf "  Calling $0\n"
+
 setup_env_vars
 
 printf "  Calling $(basename $0)\n"
@@ -136,8 +138,23 @@ ${SUDOPREFIX} cp $INTERNAL_REPO_ROOT/addons/wr-cgcs/layers/cgcs/mwa-beas/bsp-fil
 # To do this, we extract the RPMS, grab the two executables we need, and replace
 # the ones in the current filesystem
 TMPDIR=`mktemp -d`
-SHIMPKG=`find $MY_WORKSPACE/std/rpmbuild/RPMS/shim-[0-9]*.x86_64.rpm`
-GRUBPKG=`find $MY_WORKSPACE/std/rpmbuild/RPMS/grub2-efi-[0-9]*.x86_64.rpm`
+SHIMPKG=`find $MY_WORKSPACE/std/rpmbuild/RPMS/shim-x64-[0-9]*.x86_64.rpm`
+if [ -z "$SHIMPKG" ]; then
+    SHIMPKG=`find $MY_WORKSPACE/std/rpmbuild/RPMS/shim-[0-9]*.x86_64.rpm`
+fi
+if [ -z "$SHIMPKG" ]; then
+    printf "  Error -- could not locate shim binary package"
+    exit 1
+fi
+
+GRUBPKG=`find $MY_WORKSPACE/std/rpmbuild/RPMS/grub2-efi-x64-[0-9]*.x86_64.rpm`
+if [ -z "$GRUBPKG" ]; then
+    GRUBPKG=`find $MY_WORKSPACE/std/rpmbuild/RPMS/grub2-efi-[0-9]*.x86_64.rpm`
+fi
+if [ -z "$GRUBPKG" ]; then
+    printf "  Error -- could not locate grub binary package"
+    exit 1
+fi
 
 pushd $TMPDIR >/dev/null
 rpm2cpio $SHIMPKG | cpio -id --quiet
