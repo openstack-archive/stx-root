@@ -131,7 +131,7 @@ else
 fi
 
 # Update the vanilla UEFI Centos grub.cfg with the Titanium Cloud version
-${SUDOPREFIX} cp $INTERNAL_REPO_ROOT/addons/wr-cgcs/layers/cgcs/mwa-beas/bsp-files/grub.cfg  $EFI_MOUNT/EFI/BOOT/grub.cfg
+${SUDOPREFIX} cp "$BSP_FILES_PATH/grub.cfg"  "$EFI_MOUNT/EFI/BOOT/grub.cfg"
 
 # Update the grub and shim executables with the Titanium Cloud signed versions
 #
