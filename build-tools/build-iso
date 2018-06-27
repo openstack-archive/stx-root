@@ -129,6 +129,10 @@ function init_vars {
    # Where all CentOS packages live
    # Where essential CentOS (minimal install) packages live
    INTERNAL_REPO_ROOT=
+
+   # Where BSP files live
+   export BSP_FILES_PATH=
+
    # Where our own packages live
    CGCS_REPO_DIR=$MY_WORKSPACE/std/rpmbuild/RPMS
    CGCS_RT_REPO_DIR=$MY_WORKSPACE/rt/rpmbuild/RPMS
@@ -248,6 +252,9 @@ function check_vars {
    RELEASE_INFO=$INTERNAL_REPO_ROOT/addons/wr-cgcs/layers/cgcs/middleware/recipes-common/build-info/release-info.inc
    export PLATFORM_RELEASE=$(source $RELEASE_INFO && echo $PLATFORM_RELEASE)
 
+   # Where BSP files live
+   export BSP_FILES_PATH="$INTERNAL_REPO_ROOT/addons/wr-cgcs/layers/cgcs/stx-metal/bsp-files"
+
    echo "  Done"
    echo ""
 }
@@ -276,8 +283,8 @@ function init_output_dir {
 
    echo "  Installing startup files"
 
-   \cp -L $INTERNAL_REPO_ROOT/addons/wr-cgcs/layers/cgcs/mwa-beas/bsp-files/centos.syslinux.cfg $OUTPUT_DIST_DIR/isolinux/syslinux.cfg
-   \cp -L $INTERNAL_REPO_ROOT/addons/wr-cgcs/layers/cgcs/mwa-beas/bsp-files/centos.syslinux.cfg $OUTPUT_DIST_DIR/isolinux/isolinux.cfg
+   \cp -L "$BSP_FILES_PATH/centos.syslinux.cfg" "$OUTPUT_DIST_DIR/isolinux/syslinux.cfg"
+   \cp -L "$BSP_FILES_PATH/centos.syslinux.cfg" "$OUTPUT_DIST_DIR/isolinux/isolinux.cfg"
    sed -i 's/wr_usb_boot/oe_iso_boot/' $OUTPUT_DIST_DIR/isolinux/isolinux.cfg
 
    # Modify the isolinux.cfg to auto install if requested
@@ -298,8 +305,8 @@ function init_output_dir {
 
    # Copy UEFI files 
    \cp -L -ru $DISTRO_REPO_DIR/EFI/* $OUTPUT_DIST_DIR/isolinux/EFI/
-   \cp -L $INTERNAL_REPO_ROOT/addons/wr-cgcs/layers/cgcs/mwa-beas/bsp-files/grub.cfg $OUTPUT_DIST_DIR/isolinux/EFI/BOOT/grub.cfg
-   \cp -L $INTERNAL_REPO_ROOT/addons/wr-cgcs/layers/cgcs/mwa-beas/bsp-files/pxeboot_grub.cfg $OUTPUT_DIST_DIR/isolinux/pxeboot/pxeboot_grub.cfg
+   \cp -L "$BSP_FILES_PATH/grub.cfg" "$OUTPUT_DIST_DIR/isolinux/EFI/BOOT/grub.cfg"
+   \cp -L "$BSP_FILES_PATH/pxeboot_grub.cfg" "$OUTPUT_DIST_DIR/isolinux/pxeboot/pxeboot_grub.cfg"
 
    # Update the efiboot.img (See https://wiki.archlinux.org/index.php/Remastering_the_Install_ISO)
    # We need to mount the image file, replace the grub.cfg file with the Titanium Cloud one, and unmount.
@@ -318,6 +325,7 @@ function init_output_dir {
            export MY_MOCK_ROOT=$MY_MOCK_ROOT; \
            export PATH=$MY_REPO/build-tools:\$PATH; \
            export BUILD_ISO_USE_UDEV=$BUILD_ISO_USE_UDEV; \
+           export BSP_FILES_PATH=$BSP_FILES_PATH; \
            update-efiboot-image"
       echo $CMD
 
@@ -377,8 +385,8 @@ function init_output_dir {
    \rm -f $OUTPUT_DIR/efiboot.img
 
    # Copy and set up pxeboot setup files
-   \cp $INTERNAL_REPO_ROOT/addons/wr-cgcs/layers/cgcs/mwa-beas/bsp-files/pxeboot_setup.sh $OUTPUT_DIST_DIR/isolinux/pxeboot_setup.sh
-   \cp $INTERNAL_REPO_ROOT/addons/wr-cgcs/layers/cgcs/mwa-beas/bsp-files/pxeboot.cfg $OUTPUT_DIST_DIR/isolinux/pxeboot/pxeboot.cfg
+   \cp "$BSP_FILES_PATH/pxeboot_setup.sh" "$OUTPUT_DIST_DIR/isolinux/pxeboot_setup.sh"
+   \cp "$BSP_FILES_PATH/pxeboot.cfg" "$OUTPUT_DIST_DIR/isolinux/pxeboot/pxeboot.cfg"
    chmod +x $OUTPUT_DIST_DIR/isolinux/pxeboot_setup.sh
 
    \rm -f $OUTPUT_DIST_DIR/comps.xml
@@ -401,9 +409,9 @@ function final_touches {
       \cp $OUTPUT_DIST_DIR/comps.xml $OUTPUT_DIST_DIR/comps.xml.bak
    fi
 
-   python $INTERNAL_REPO_ROOT/addons/wr-cgcs/layers/cgcs/mwa-beas/bsp-files/platform_comps.py \
-      --pkgdir $OUTPUT_DIST_DIR/isolinux/Packages \
-      --groups $OUTPUT_DIST_DIR/comps.xml
+   python "$BSP_FILES_PATH/platform_comps.py" \
+      --pkgdir "$OUTPUT_DIST_DIR/isolinux/Packages" \
+      --groups "$OUTPUT_DIST_DIR/comps.xml"
    if [ $? -ne 0 ]; then
       echo "Failed to update comps.xml"
       exit 1
@@ -579,7 +587,7 @@ function setup_upgrades_files {
    UPGRADES_DIR="$OUTPUT_DIST_DIR/isolinux/upgrades"
    \rm -rf $UPGRADES_DIR
    \mkdir -p $UPGRADES_DIR
-   \cp $INTERNAL_REPO_ROOT/addons/wr-cgcs/layers/cgcs/mwa-beas/bsp-files/upgrades/*  $UPGRADES_DIR
+   \cp "$BSP_FILES_PATH/bsp-files/upgrades/*"  "$UPGRADES_DIR"
    sed -i "s/xxxSW_VERSIONxxx/${PLATFORM_RELEASE}/g" $UPGRADES_DIR/metadata.xml
    chmod +x $UPGRADES_DIR/*.sh
    # Write the version out (used in upgrade scripts - this is the same as SW_VERSION)
