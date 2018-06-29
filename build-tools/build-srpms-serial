@@ -208,8 +208,8 @@ fi
 
 export CCACHE_DIR="$BUILD_ROOT/.ccache"
 export SRC_BASE="$SRC_ROOT"
-export CGCS_BASE="$SRC_BASE/addons/wr-cgcs/layers/cgcs"
-export STX_BASE="$CGCS_BASE"
+export STX_BASE="$SRC_BASE/stx"
+export CGCS_BASE="$STX_BASE"
 export SPECS_BASE="$ORIG_SPECS_PATH"
 export FILES_BASE="$FILES_PATH"
 export PATCHES_BASE="$PATCHES_PATH"
@@ -241,9 +241,9 @@ if [ ! -d $BUILD_BASE ]; then
    exit 1
 fi
 
-RELEASE_INFO_FILE=$SRC_BASE/addons/wr-cgcs/layers/cgcs/middleware/recipes-common/build-info/release-info.inc
+RELEASE_INFO_FILE=$STX_BASE/middleware/recipes-common/build-info/release-info.inc
 if [ -f $RELEASE_INFO_FILE ]; then
-   source $MY_REPO/addons/wr-cgcs/layers/cgcs/middleware/recipes-common/build-info/release-info.inc
+   source $RELEASE_INFO_FILE
 else
    echo "ERROR: failed to find RELEASE_INFO_FILE=$RELEASE_INFO_FILE"
    exit 1

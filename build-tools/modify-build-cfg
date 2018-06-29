@@ -116,7 +116,7 @@ done
 # okay, now we have lines for each env var.  Generate the correct values
 
 BUILD_DATE=`date "+%F %T %z"`
-CGCS_GIT_BRANCH=`cd $MY_REPO/addons/wr-cgcs/layers/cgcs/; git rev-parse --abbrev-ref HEAD`
+CGCS_GIT_BRANCH=`cd $MY_REPO/stx/; git rev-parse --abbrev-ref HEAD`
 WRS_GIT_BRANCH=`cd $MY_REPO; git rev-parse --abbrev-ref HEAD`
 REPO=$MY_REPO
 
