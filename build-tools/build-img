@@ -51,9 +51,11 @@ fi
 
 # Step 2: Convert the ISO to IMG
 if [ $PART -ne 1 ]; then
+   INSTALL_ISO_TO_DISK_IMAGE=$MY_REPO/stx/extras.ND/scripts/install_iso_to_disk_image.sh
+
    if [ ! -e "/dev/loop-control"  -o ! -e "/dev/kvm" ]; then
       CMD="cd $MY_WORKSPACE/export; \
-           $MY_REPO/addons/wr-cgcs/layers/cgcs/extras.ND/scripts/install_iso_to_disk_image.sh bootimage_auto.iso $DEST_IMG"
+           $INSTALL_ISO_TO_DISK_IMAGE bootimage_auto.iso $DEST_IMG"
 
       if [ "$HOSTNAME" == "yow-cgts3-centos7" ]; then
          echo "Attempting to run kvm_iso_to_img on yow-cgts3-lx"
@@ -77,7 +79,7 @@ if [ $PART -ne 1 ]; then
          printf "No kvm and/or loop device on this machine.  To complete the build \n"
          printf "please copy '$MY_WORKSPACE/export/bootimage_auto.iso' to a machine \n"
          printf "that supports kvm and loop devices and run ... \n"
-         printf "   $MY_REPO/addons/wr-cgcs/layers/cgcs/extras.ND/scripts/install_iso_to_disk_image.sh bootimage_auto.iso $DEST_IMG\n"
+         printf "   $INSTALL_ISO_TO_DISK_IMAGE bootimage_auto.iso $DEST_IMG\n"
          printf "****************************************************************** \n"
          exit 1
       fi
@@ -86,7 +88,7 @@ if [ $PART -ne 1 ]; then
    if [ ! -f "$MY_WORKSPACE/export/$DEST_IMG" ]; then
       (
       cd $MY_WORKSPACE/export
-      $MY_REPO/addons/wr-cgcs/layers/cgcs/extras.ND/scripts/install_iso_to_disk_image.sh bootimage_auto.iso $DEST_IMG
+      $INSTALL_ISO_TO_DISK_IMAGE bootimage_auto.iso $DEST_IMG
       exit $?
       )
    fi

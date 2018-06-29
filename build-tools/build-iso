@@ -129,6 +129,11 @@ function init_vars {
    # Where all CentOS packages live
    # Where essential CentOS (minimal install) packages live
    INTERNAL_REPO_ROOT=
+   STX_DIR=
+
+   # Where BSP files live
+   export BSP_FILES_PATH=
+
    # Where our own packages live
    CGCS_REPO_DIR=$MY_WORKSPACE/std/rpmbuild/RPMS
    CGCS_RT_REPO_DIR=$MY_WORKSPACE/rt/rpmbuild/RPMS
@@ -215,6 +220,8 @@ function check_vars {
       exit 1
    fi
 
+   STX_DIR=$INTERNAL_REPO_ROOT/stx
+
    printf "\nChecking that we can access $DISTRO_REPO_DIR\n"
    if [ ! -d "$DISTRO_REPO_DIR" ] ; then
       printf "  Error -- could not access $DISTRO_REPO_DIR\n"
@@ -245,8 +252,11 @@ function check_vars {
       exit 1
    fi
 
-   RELEASE_INFO=$INTERNAL_REPO_ROOT/addons/wr-cgcs/layers/cgcs/middleware/recipes-common/build-info/release-info.inc
+   RELEASE_INFO=$STX_DIR/middleware/recipes-common/build-info/release-info.inc
    export PLATFORM_RELEASE=$(source $RELEASE_INFO && echo $PLATFORM_RELEASE)
+
+   # Where BSP files live
+   export BSP_FILES_PATH="$STX_DIR/stx-metal/bsp-files"
 
    echo "  Done"
    echo ""
@@ -453,7 +463,6 @@ function extract_pkg_from_local_repo {
 function extract_installer_files {
    # Changes to copied files here must also be reflected in patch-iso
 
-   CGCSDIR=$INTERNAL_REPO_ROOT/addons/wr-cgcs/layers/cgcs
    PKGDIR=$OUTPUT_DIST_DIR/isolinux/Packages
 
    (
