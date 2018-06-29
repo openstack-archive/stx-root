@@ -18,7 +18,7 @@ usage () {
     echo "  PKG=lighttpd"
     echo "  OLD_SRC_RPM=lighttpd-1.4.41-1.el7.src.rpm"
     echo "  NEW_SRC_RPM=lighttpd-1.4.41-2.el7.src.rpm"
-    echo "  SRPM_PATH=$MY_REPO/addons/wr-cgcs/layers/cgcs/recipes-extended/lighttpd/centos/srpm_path"
+    echo "  SRPM_PATH=$MY_REPO/stx/stx-integ/extended/lighttpd/centos/srpm_path"
     echo "  echo \"\$PKG#\$SRPM_PATH##\$OLD_SRC_RPM#\$NEW_SRC_RPM\" > UPVERSION_DATA"
     echo ""
 }

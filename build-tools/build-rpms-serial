@@ -583,6 +583,7 @@ export BUILD_BASE="$BUILD_ROOT"
 export CCACHE_DIR="$BUILD_ROOT/.ccache"
 export RESULT_DIR="$BUILD_BASE/results"
 export SRC_BASE="$SRC_ROOT"
+export STX_BASE=$SRC_BASE/stx
 
 if [ "x$MY_SRC_RPM_BUILD_DIR" != "x" ]; then
     RPM_BUILD_ROOT=$MY_SRC_RPM_BUILD_DIR
@@ -590,9 +591,9 @@ else
     RPM_BUILD_ROOT=$BUILD_BASE/rpmbuild
 fi
 
-RELEASE_INFO_FILE=$SRC_BASE/addons/wr-cgcs/layers/cgcs/middleware/recipes-common/build-info/release-info.inc
+RELEASE_INFO_FILE=$STX_BASE/middleware/recipes-common/build-info/release-info.inc
 if [ -f $RELEASE_INFO_FILE ]; then
-   source $MY_REPO/addons/wr-cgcs/layers/cgcs/middleware/recipes-common/build-info/release-info.inc
+   source $RELEASE_INFO_FILE
 else
    echo "ERROR: failed to find RELEASE_INFO_FILE=$RELEASE_INFO_FILE"
    exit 1
