@@ -8,14 +8,15 @@ if [ -z "${MY_REPO}" ]; then
     exit 1
 fi
 
-SETUP_PATCH_REPO=${MY_REPO}/addons/wr-cgcs/layers/cgcs/extras.ND/scripts/setup_patch_repo.sh
+STX_DIR=${MY_REPO}/stx
+SETUP_PATCH_REPO=${STX_DIR}/extras.ND/scripts/setup_patch_repo.sh
 if [ ! -x ${SETUP_PATCH_REPO} ]; then
     echo "Cannot find or execute ${SETUP_PATCH_REPO}"
     exit 1
 fi
 
-REPO_UPGRADES_DIR=${MY_REPO}/addons/wr-cgcs/layers/cgcs/common-bsp/files/upgrades
-RELEASE_INFO=${MY_REPO}/addons/wr-cgcs/layers/cgcs/middleware/recipes-common/build-info/release-info.inc
+REPO_UPGRADES_DIR=${STX_DIR}/common-bsp/files/upgrades
+RELEASE_INFO=${STX_DIR}/middleware/recipes-common/build-info/release-info.inc
 PLATFORM_RELEASE=$(source $RELEASE_INFO && echo $PLATFORM_RELEASE)
 
 function usage() {

@@ -83,12 +83,14 @@ function check_vars {
       exit 1
    fi
 
+   STX_DIR=$INTERNAL_REPO_ROOT/stx
+
    if [ "x$MY_BUILD_CFG" == "x" ];then
        printf "  Error -- reqiure MY_BUILD_CFG to be defined.\n"
        exit 1
    fi
 
-   RELEASE_INFO=$INTERNAL_REPO_ROOT/addons/wr-cgcs/layers/cgcs/middleware/recipes-common/build-info/release-info.inc
+   RELEASE_INFO=$STX_DIR/middleware/recipes-common/build-info/release-info.inc
    export PLATFORM_RELEASE=$(source $RELEASE_INFO && echo $PLATFORM_RELEASE)
 }
 
