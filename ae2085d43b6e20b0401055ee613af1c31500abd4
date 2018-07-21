@@ -1,0 +1,9 @@
+Code-Review+2: Dean Troyer <dtroyer@gmail.com>
+Code-Review+2: Saul Wold <sgw@linux.intel.com>
+Workflow+1: Erich Cordoba <erich.cordoba.malibran@intel.com>
+Verified+2: Zuul
+Submitted-by: Zuul
+Submitted-at: Sat, 21 Jul 2018 20:11:16 +0000
+Reviewed-on: https://review.openstack.org/584214
+Project: openstack/stx-root
+Branch: refs/heads/master
