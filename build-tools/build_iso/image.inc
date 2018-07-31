@@ -375,6 +375,7 @@ kubernetes-master
 kubernetes-node
 etcd
 docker-distribution
+helm
 # Add debugging tools
 perf
 zip
