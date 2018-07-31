@@ -228,6 +228,7 @@ lighttpd-fastcgi
 lighttpd-mod_geoip
 lighttpd-mod_mysql_vhost
 novnc
+linuxptp
 ntp
 ntp-perl
 procps-ng
