@@ -16,7 +16,7 @@ if [ ! -x ${SETUP_PATCH_REPO} ]; then
 fi
 
 REPO_UPGRADES_DIR=${STX_DIR}/common-bsp/files/upgrades
-RELEASE_INFO=${STX_DIR}/middleware/recipes-common/build-info/release-info.inc
+RELEASE_INFO=${STX_DIR}/stx-integ/utilities/build-info/release-info.inc
 PLATFORM_RELEASE=$(source $RELEASE_INFO && echo $PLATFORM_RELEASE)
 
 function usage() {

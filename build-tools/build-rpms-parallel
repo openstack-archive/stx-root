@@ -1494,7 +1494,7 @@ else
     RPM_BUILD_ROOT=$BUILD_BASE/rpmbuild
 fi
 
-RELEASE_INFO_FILE=$STX_BASE/middleware/recipes-common/build-info/release-info.inc
+RELEASE_INFO_FILE=$STX_BASE/stx-integ/utilities/build-info/release-info.inc
 if [ -f $RELEASE_INFO_FILE ]; then
    source $RELEASE_INFO_FILE
 else
