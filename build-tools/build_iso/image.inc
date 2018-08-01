@@ -27,7 +27,6 @@ haproxy
 influxdb
 python2-influxdb
 influxdb-extensions
-io-monitor
 iperf3
 isomd5sum
 iscsi-initiator-utils
