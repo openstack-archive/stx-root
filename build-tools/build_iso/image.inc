@@ -300,7 +300,6 @@ libcephfs1
 python-ceph-compat
 python-cephfs
 socat
-irqbalance
 kmod-e1000e
 kmod-i40e
 kmod-ixgbe

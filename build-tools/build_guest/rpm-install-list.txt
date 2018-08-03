@@ -90,7 +90,6 @@ iperf3
 iproute
 iptables
 iputils
-irqbalance
 iwl7265-firmware
 jansson
 jbigkit-libs
