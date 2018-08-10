@@ -28,35 +28,50 @@ spec_evaluate () {
    local SPEC_FILE=$2
    local RPMBUILD_DIR=$3
 
+   local LAST_SPEC_EVALUATING="$SPEC_EVALUATING"
    local MACRO=""
    local MACRO_VALUE=""
+   local RC=0
 
    if [ "x$RPMBUILD_DIR" == "x" ];then
       RPMBUILD_DIR=$(dirname $(dirname $SPEC_FILE))
    fi
 
-   MACRO=`expr match "$RAW_VALUE" '.*\(%{[^}]*}\)'`
+   MACRO=$(expr match "$RAW_VALUE" '.*\(%{[^}]*}\)')
    if [ $? -ne 0 ]; then
       echo "$RAW_VALUE"
       return 0
    fi
 
+   if [ "x$SPEC_EVALUATING" == "x" ]; then
+       SPEC_EVALUATING=":$MACRO:"
+   else
+       echo "$SPEC_EVALUATING" | grep -q ":$MACRO:"
+       if [ $? -eq 0 ]; then
+           # Break a recursion
+           >&2 echo "ERROR: evaluation of macro '$MACRO' failed due to recursion"
+           return 1
+       fi
+       SPEC_EVALUATING="$LAST_SPEC_EVALUATING$MACRO:"
+   fi
+
    # >&2 echo "spec_evaluate: MACRO=$MACRO"
    local MACRO_NAME2=${MACRO#%{}
    local MACRO_NAME3=${MACRO_NAME2%\}}
-   local PREFIX=`expr match "$MACRO_NAME3" '\([!?]*\)'`
+   local PREFIX=$(expr match "$MACRO_NAME3" '\([!?]*\)')
    local MACRO_NAME=${MACRO_NAME3#${PREFIX}}
 
    # >&2 echo "spec_evaluate: MACRO_NAME=$MACRO_NAME"
-   MACRO_VALUE=`spec_find_macro $MACRO_NAME $SPEC_FILE $RPMBUILD_DIR`
+   MACRO_VALUE=$(spec_find_macro $MACRO_NAME $SPEC_FILE $RPMBUILD_DIR)
    if [ $? -ne 0 ]; then
-      MACRO_VALUE=`spec_find_global $MACRO_NAME $SPEC_FILE $RPMBUILD_DIR`
+      # >&2 echo "CALL: spec_find_global $MACRO_NAME $SPEC_FILE $RPMBUILD_DIR"
+      MACRO_VALUE=$(spec_find_global $MACRO_NAME $SPEC_FILE $RPMBUILD_DIR)
       if [ $? -ne 0 ]; then
-         MACRO_VALUE=`spec_find_tag ${MACRO_NAME^} $SPEC_FILE $RPMBUILD_DIR`
+         MACRO_VALUE=$(spec_find_tag ${MACRO_NAME^} $SPEC_FILE $RPMBUILD_DIR)
          if [ $? -ne 0 ]; then
-            MACRO_VALUE=`macro_find_macro $MACRO_NAME $SPEC_FILE $RPMBUILD_DIR`
+            MACRO_VALUE=$(macro_find_macro $MACRO_NAME $SPEC_FILE $RPMBUILD_DIR)
             if [ $? -ne 0 ]; then
-               MACRO_VALUE=`spec_find_macro_via_rpm $MACRO_NAME $SPEC_FILE $RPMBUILD_DIR`
+               MACRO_VALUE=$(spec_find_macro_via_rpm $MACRO_NAME $SPEC_FILE $RPMBUILD_DIR)
                if [ $? -ne 0 ]; then
                   case "$MACRO_NAME" in
  
@@ -73,6 +88,7 @@ spec_evaluate () {
                         >&2 echo "NOTE: optional macro '$MACRO' not defined"
                      else
                         >&2 echo "ERROR: evaluation of macro '$MACRO' failed"
+                        SPEC_EVALUATING="$LAST_SPEC_EVALUATING"
                         return 1
                      fi
                   fi
@@ -86,6 +102,9 @@ spec_evaluate () {
    local NEW_VALUE=${RAW_VALUE/"${MACRO}"/${MACRO_VALUE}}
    # >&2 echo "spec_evaluate: NEW_VALUE=$NEW_VALUE"
    spec_evaluate "$NEW_VALUE" "$SPEC_FILE" "$RPMBUILD_DIR"
+   RC=$?
+   SPEC_EVALUATING="$LAST_SPEC_EVALUATING"
+   return $RC
 }
 
 macro_find_macro () {
@@ -99,7 +118,7 @@ macro_find_macro () {
    fi
 
    # >&2 echo "grep ^%$TARGET $RPM_MACRO_FILE"
-   LINE=`grep "^%$TARGET[[:space:]]" $RPM_MACRO_FILE`
+   LINE=$(grep "^%$TARGET[[:space:]]" $RPM_MACRO_FILE)
    if [ $? -eq 1 ]; then
        >&2 echo "macro_find_macro: '%$TARGET' not found in file '$RPM_MACRO_FILE'"
        echo ""
@@ -153,11 +172,11 @@ spec_find_macro () {
    fi
 
    # >&2 echo "grep ^%define $TARGET $SPEC_FILE"
-   LINE=`grep "^%define $TARGET[[:space:]]" $SPEC_FILE`
+   LINE=$(grep "^%define $TARGET[[:space:]]" $SPEC_FILE)
    if [ $? -eq 1 ]; then
-       LINE=`grep "^%$TARGET[[:space:]]" $SPEC_FILE`
+       LINE=$(grep "^%$TARGET[[:space:]]" $SPEC_FILE)
        if [ $? -eq 1 ]; then
-           >&2 echo "spec_find_macro: Neither '%define $TARGET' nor '%$TARGET' not found in file '$SPEC_FILE'"
+           >&2 echo "spec_find_macro: Neither '%define $TARGET' nor '%$TARGET' found in file '$SPEC_FILE'"
            echo ""
            return 1
        else
@@ -252,7 +271,7 @@ spec_find_global () {
       RPMBUILD_DIR=$(dirname $(dirname $SPEC_FILE))
    fi
 
-   LINE=`grep "^%global $TARGET" $SPEC_FILE`
+   LINE=$(grep "^%global $TARGET" $SPEC_FILE)
    if [ $? -eq 1 ]; then
        >&2 echo "spec_find_global: '%global $TARGET' not found in file '$SPEC_FILE'"
        echo ""
@@ -282,7 +301,7 @@ spec_find_patch_args () {
    fi
 
    PATCH_LOWER_NO=$(echo $PATCH_NO | tr '[:upper:]' '[:lower:]')
-   LINE=`grep "^%$PATCH_LOWER_NO " $SPEC_FILE`
+   LINE=$(grep "^%$PATCH_LOWER_NO " $SPEC_FILE)
    if [ $? -eq 1 ]; then
        >&2 echo "pec_find_patch_args: $PATCH_LOWER_NO' not found in file '$SPEC_FILE'"
        echo "-p1"
@@ -505,7 +524,7 @@ spec_match_package_list () {
       RPMBUILD_DIR=$(dirname $(dirname $SPEC_FILE))
    fi
 
-   for PKG_NAME in `spec_list_packages "$SPEC_FILE" "$RPMBUILD_DIR"`; do
+   for PKG_NAME in $(spec_list_packages "$SPEC_FILE" "$RPMBUILD_DIR"); do
        for TARGET in "${TARGET_LIST[@]}"; do
            if [ "$PKG_NAME" == "$TARGET" ]; then
                echo $TARGET
@@ -532,7 +551,7 @@ spec_match_package () {
       RPMBUILD_DIR=$(dirname $(dirname $SPEC_FILE))
    fi
 
-   for PKG_NAME in `spec_list_packages "$SPEC_FILE" "$RPMBUILD_DIR"`; do
+   for PKG_NAME in $(spec_list_packages "$SPEC_FILE" "$RPMBUILD_DIR"); do
        if [ "$PKG_NAME" == "$TARGET" ]; then
            echo "found target '$TARGET' in file '$SPEC_FILE' as a package name"
            return 0
@@ -556,7 +575,7 @@ spec_match_target_list () {
       RPMBUILD_DIR=$(dirname $(dirname $SPEC_FILE))
    fi
 
-   NAME=`spec_find_tag Name "$SPEC_FILE" "$RPMBUILD_DIR"`
+   NAME=$(spec_find_tag Name "$SPEC_FILE" "$RPMBUILD_DIR")
    if [ $? -eq 0 ]; then
        for TARGET in "${TARGET_LIST[@]}"; do
            if [ "$NAME" == "$TARGET" ]; then
@@ -570,7 +589,7 @@ spec_match_target_list () {
        done
    fi
 
-   SERVICE=`spec_find_global service "$SPEC_FILE" "$RPMBUILD_DIR"`
+   SERVICE=$(spec_find_global service "$SPEC_FILE" "$RPMBUILD_DIR")
    if [ $? -eq 0 ]; then
        for TARGET in "${TARGET_LIST[@]}"; do
            if [ "$SERVICE" == "$TARGET" ]; then
@@ -605,7 +624,7 @@ spec_match_target () {
       RPMBUILD_DIR=$(dirname $(dirname $SPEC_FILE))
    fi
 
-   NAME=`spec_find_tag Name "$SPEC_FILE" "$RPMBUILD_DIR"`
+   NAME=$(spec_find_tag Name "$SPEC_FILE" "$RPMBUILD_DIR")
    if [ $? -eq 0 ]; then
        if [ "$NAME" == "$TARGET" ]; then
            echo "found target '$TARGET' in file '$SPEC_FILE' as a name"
@@ -613,7 +632,7 @@ spec_match_target () {
        fi
    fi
 
-   SERVICE=`spec_find_global service "$SPEC_FILE" "$RPMBUILD_DIR"`
+   SERVICE=$(spec_find_global service "$SPEC_FILE" "$RPMBUILD_DIR")
    if [ $? -eq 0 ]; then
        if [ "$SERVICE" == "$TARGET" ]; then
            echo "found target '$TARGET' in file '$SPEC_FILE' as a service"

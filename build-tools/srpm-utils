@@ -13,6 +13,36 @@ METHOD_NO_RPMBUILD=0
 METHOD_RPMBUILD_UNPATCH=1
 METHOD_RPMBUILD_SCRIPT=2
 
+
+
+srpm_spec_find_version () {
+    local SPEC_PATH="$1"
+    local PKG_VER=$(spec_find_tag Version $SPEC_PATH 2>> /dev/null)
+
+    if [ "x$PKG_VER" == "x" ]; then
+        if [ "x$SRPM_EXPORT_VER" != "x" ]; then
+            PKG_VER="$SRPM_EXPORT_VER"
+        else
+            PKG_VER="0"
+        fi
+    fi
+    echo "$PKG_VER"
+}
+
+srpm_spec_find_name () {
+    local SPEC_PATH="$1"
+    local PKG_VER=$(spec_find_tag Name $SPEC_PATH 2>> /dev/null)
+
+    if [ "x$PKG_VER" == "x" ]; then
+        if [ "x$SRPM_EXPORT_NAME" != "x" ]; then
+            PKG_VER="$SRPM_EXPORT_NAME"
+        else
+            PKG_VER="0"
+        fi
+    fi
+    echo "$PKG_VER"
+}
+
 # Find the common root directory of a tar file.
 # This form take as input command syntax to list the tar file contents.
 # Prefered from is to use tar -tvf ... plus any additional args.
@@ -1160,8 +1190,8 @@ srpm_build_dictionary () {
    local srpm_path
    local name
 
-   for srpm_path in `find $srpm_dir -name '*.src.rpm' | sort -V`; do
-      name=`rpm_get_name $srpm_path`
+   for srpm_path in $(find $srpm_dir -name '*.src.rpm' | sort -V); do
+      name=$(rpm_get_name $srpm_path)
       SRPM_PKG_NAME_TO_PATH[$name]="$srpm_path"
       SRPM_PKG_NAMES+=("$name")
    done
@@ -1172,8 +1202,8 @@ srpm_build_std_dictionary () {
    local srpm_path
    local name
 
-   for srpm_path in `find $srpm_dir -name '*.src.rpm' | sort -V`; do
-      name=`rpm_get_name $srpm_path`
+   for srpm_path in $(find $srpm_dir -name '*.src.rpm' | sort -V); do
+      name=$(rpm_get_name $srpm_path)
       STD_SRPM_PKG_NAME_TO_PATH[$name]="$srpm_path"
       STD_SRPM_PKG_NAMES+=("$name")
    done
@@ -1194,20 +1224,27 @@ srpm_assemble () {
 
    for SPEC in $(cd $FULL_BUILD_DIR/SPECS/; ls -1 *.spec); do
       SPEC_PATH="$FULL_BUILD_DIR/SPECS/$SPEC"
-      NAME=`spec_find_tag Name "$SPEC_PATH" 2>> /dev/null`
+      NAME=$(srpm_spec_find_name "$SPEC_PATH" 2>> /dev/null)
       if [ $? -ne 0 ]; then
           echo "ERROR: $FUNCNAME (${LINENO}): 'Name' not found in '$SPEC_PATH'"
       fi
-      VERSION=`spec_find_tag Version "$SPEC_PATH" 2>> /dev/null`
+
+      VERSION=$(srpm_spec_find_version "$SPEC_PATH" 2>> /dev/null)
       if [ $? -ne 0 ]; then
           echo "ERROR: $FUNCNAME (${LINENO}): 'Version' not found in '$SPEC_PATH'"
-          VERSION="0"
+          if [ "x$SRPM_EXPORT_NAME" != "x" ]; then
+              VERSION="$SRPM_EXPORT_NAME"
+          else
+              VERSION="0"
+          fi
       fi
-      RELEASE=`spec_find_tag Release "$SPEC_PATH" "$(dirname $(dirname $SPEC_PATH))" "$TIS_PATCH_VER" 2>> /dev/null`
+
+      RELEASE=$(spec_find_tag Release "$SPEC_PATH" "$(dirname $(dirname $SPEC_PATH))" "$TIS_PATCH_VER" 2>> /dev/null)
       if [ $? -ne 0 ]; then
           echo "ERROR: $FUNCNAME (${LINENO}): 'Release' not found in '$SPEC_PATH'"
           RELEASE="0"
       fi
+
       SRPM="$NAME-$VERSION-$RELEASE.src.rpm"
       SRPM_PATH="$FULL_BUILD_DIR/SRPMS/$SRPM"
 
@@ -1219,7 +1256,7 @@ srpm_assemble () {
 
       BUILD_NEEDED=0
       if [ -f $SRPM_PATH ]; then
-          n=`find $FULL_BUILD_DIR -cnewer $SRPM_PATH | wc -l`
+          n=$(find $FULL_BUILD_DIR -cnewer $SRPM_PATH | wc -l)
           if [ $n -gt 0 ]; then
               BUILD_NEEDED=1
           fi
@@ -1270,8 +1307,8 @@ srpm_extract () {
    local BRANCH=$5
 
    local USE_GIT=0
-   local ORIG_DIR=`pwd`
-   local PKG_DIR=`rpm -q --queryformat '%{NAME}-%{VERSION}-%{RELEASE}\n' --nosignature -p $ORIG_SRPM_PATH`
+   local ORIG_DIR=$(pwd)
+   local PKG_DIR=$(rpm -q --queryformat '%{NAME}-%{VERSION}-%{RELEASE}\n' --nosignature -p $ORIG_SRPM_PATH)
 
    if [ "x$ROOT_DIR" == "x" ]; then
       ROOT_DIR="$MY_WORKSPACE/srpm_assemble"
@@ -1302,8 +1339,8 @@ srpm_extract () {
    for SPEC in $(cd $SPEC_DIR; ls -1 *.spec); do
       echo $SPEC;
       SPEC_GIT="$GIT_DIR/$SPEC"
-      PKG_NAME=$(spec_find_tag Name $SPEC_DIR/$SPEC 2>> /dev/null)
-      PKG_VER=$(spec_find_tag Version $SPEC_DIR/$SPEC 2>> /dev/null)
+      PKG_NAME=$(srpm_spec_find_name $SPEC_DIR/$SPEC 2>> /dev/null)
+      PKG_VER=$(srpm_spec_find_version $SPEC_DIR/$SPEC 2>> /dev/null)
       TAR_DIR="$PKG_NAME-$PKG_VER"
       PATCH_TARGET_DIR="$SPEC_GIT/$TAR_DIR"
       echo "   $TAR_DIR"
@@ -1330,7 +1367,7 @@ srpm_apply_meta_patches () {
    local ARCH=$4
    local BRANCH=$5
 
-   local ORIG_DIR=`pwd`
+   local ORIG_DIR=$(pwd)
    local META_PATCH_DIR
    local PATCH_DIR
    local PATCH
@@ -1362,7 +1399,7 @@ srpm_apply_meta_patches () {
       return 1
    fi
 
-   for PATCH in `cat $PO_PATH`; do
+   for PATCH in $(cat $PO_PATH); do
       PATCH_PATH="$META_PATCH_DIR/$PATCH"
       if [ ! -f "$PATCH_PATH" ]; then
          echo "ERROR: $FUNCNAME (${LINENO}): patch '$PATCH_PATH' not found."
@@ -1395,7 +1432,7 @@ srpm_apply_meta_patches () {
          return 1
       fi
 
-      for dd in `find . -type d | sort -V`; do
+      for dd in $(find . -type d | sort -V); do
          d=${dd:2}
          mkdir -p "$META_PATCH_TARGET_DIR/SOURCES/$d"
          if [ $? -ne 0 ]; then
@@ -1405,7 +1442,7 @@ srpm_apply_meta_patches () {
          fi
       done
 
-      for ff in `find . -type f | sort -V`; do
+      for ff in $(find . -type f | sort -V); do
          f=${ff:2}
          d=$(dirname $f)
          \cp -L -f -v "$PATCH_DIR/$f" "$META_PATCH_TARGET_DIR/SOURCES/$d"
@@ -2003,7 +2040,7 @@ tarball_extract () {
            if [ $NEED_PATCH_ROLLBACK -eq 1 ]; then
               # But we don't want patches yet, so roll them back.
               # Use the log from rpmbuild to learn what patches to roll back, in what order, and with what arguements
-              for n in `grep '^[Pp]atch #' $RPMBUILD_BP_LOG | tac | awk '{ print $2 }' | sed 's/#//'`; do
+              for n in $(grep '^[Pp]atch #' $RPMBUILD_BP_LOG | tac | awk '{ print $2 }' | sed 's/#//'); do
                  cmd1=$(cat $RPMBUILD_BP_LOG | sed -n "/^[Pp]atch #$n /,/^patching/p" | grep '^+' | sed 's/^+ //' | grep '[/]cat')
                  cmd2=$(cat $RPMBUILD_BP_LOG | sed -n "/^[Pp]atch #$n /,/^patching/p" | grep '^+' | sed 's/^+ //' | grep '[/]patch')
                  cmd="$cmd1 | $cmd2 -R"
@@ -2142,7 +2179,7 @@ tar_and_spec_extract_to_git () {
       return 1
    fi
 
-   local ORIG_DIR=`pwd`
+   local ORIG_DIR=$(pwd)
 
    if [ "x$ROOT_DIR" == "x" ]; then
       ROOT_DIR="$MY_WORKSPACE/srpm_work"
@@ -2324,8 +2361,8 @@ srpm_extract_to_git () {
       return 1
    fi
 
-   local ORIG_DIR=`pwd`
-   local PKG_DIR=`rpm -q --queryformat '%{NAME}\n' --nosignature -p $ORIG_SRPM_PATH`
+   local ORIG_DIR=$(pwd)
+   local PKG_DIR=$(rpm -q --queryformat '%{NAME}\n' --nosignature -p $ORIG_SRPM_PATH)
 
    if [ "x$ROOT_DIR" == "x" ]; then
       ROOT_DIR="$MY_WORKSPACE/srpm_work"
@@ -2415,8 +2452,8 @@ srpm_extract_to_git () {
    for SPEC in $(cd $SPEC_DIR; ls -1 *.spec); do
       echo $SPEC;
       SPEC_GIT="$GIT_DIR/$SPEC"
-      PKG_NAME=$(spec_find_tag Name $SPEC_DIR/$SPEC 2>> /dev/null)
-      PKG_VER=$(spec_find_tag Version $SPEC_DIR/$SPEC 2>> /dev/null)
+      PKG_NAME=$(srpm_spec_find_name $SPEC_DIR/$SPEC 2>> /dev/null)
+      PKG_VER=$(srpm_spec_find_version $SPEC_DIR/$SPEC 2>> /dev/null)
       TAR_DIR="$PKG_NAME-$PKG_VER"
       echo "   $TAR_DIR"
 
@@ -2456,7 +2493,7 @@ srpm_extract_to_git () {
       cd $PATCH_TARGET_DIR
 
       # Verify we are on the correct branch
-      CURRENT_BRANCH=`git rev-parse --abbrev-ref HEAD`
+      CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
       if [ "$CURRENT_BRANCH" != "$BRANCH" ]; then
          echo "git checkout -b $BRANCH"
          git checkout -b $BRANCH
@@ -2596,7 +2633,7 @@ srpm_apply_spec_patches () {
    local PATCH 
    local PATCH_ARGS
 
-   local ORIG_DIR=`pwd`
+   local ORIG_DIR=$(pwd)
    echo "Applying patches"
 
    if [ ! -f "$SPEC_PATH" ]; then
@@ -2722,7 +2759,7 @@ srpm_apply_patch() {
 
    # echo "srpm_apply_patch: PATCH=$PATCH  PATCH_ARGS=$PATCH_ARGS  TARGET_DIR=$TARGET_DIR  USE_GIT=$USE_GIT  COMMENT_PREFIX=$COMMENT_PREFIX  METHOD=$METHOD  RAW_SCRIPT=$RAW_SCRIPT  ROOT_DIR=$ROOT_DIR  RPMBUILD_BUILD_DIR=$RPMBUILD_BUILD_DIR  SPEC_GIT=$SPEC_GIT  PATCH_NO=$PATCH_NO"
    local ORIG_DIR
-   ORIG_DIR=`pwd`
+   ORIG_DIR=$(pwd)
 
    if [ ! -f $PATCH ]; then
       echo "ERROR: $FUNCNAME (${LINENO}): Patch '$PATCH' not found"
@@ -2752,7 +2789,7 @@ srpm_apply_patch() {
    fi
 
    local TAG="v$BRANCH"
-   local PFN=`basename $PATCH`
+   local PFN=$(basename $PATCH)
 
    local MSG="$PFN"
    local HASH=""
@@ -2760,7 +2797,7 @@ srpm_apply_patch() {
    local ADD_WC
 
    if [ $USE_GIT -gt 0 ]; then
-      HASH=`git log --pretty=format:'%H' --grep="$MSG\$"`
+      HASH=$(git log --pretty=format:'%H' --grep="$MSG\$")
    fi
 
    if [ "x$HASH" == "x" ]; then
@@ -2810,7 +2847,7 @@ srpm_apply_patch() {
          fi
       else
          echo "patch $PATCH_ARGS < $PATCH"
-         patch $PATCH_ARGS --no-backup-if-mismatch < $PATCH
+         patch -f $PATCH_ARGS --no-backup-if-mismatch < $PATCH
          if [ $? -ne 0 ]; then
             echo "failed to apply patch '$PATCH'"
             return 1
@@ -2819,7 +2856,7 @@ srpm_apply_patch() {
 
       if [ $PWD = $HOME ]; then
           echo "DPENNEY: in the home dir somehow"
-          exit 1
+          return 1
       fi
 
       if [ $? -eq 0 ]; then
@@ -2865,7 +2902,7 @@ srpm_find_tag () {
    local TAG=$1
    local SRPM_FILE=$2
 
-   local VALUE=`rpm -q --queryformat "%{$TAG}\n" --nosignature -p $SRPM_FILE`
+   local VALUE=$(rpm -q --queryformat "%{$TAG}\n" --nosignature -p $SRPM_FILE)
    if [ $? -ne 0 ]; then
       echo ""
       return 1
@@ -2879,7 +2916,7 @@ srpm_find_tag () {
 srpm_list_packages () {
    local SRPM_FILE=$1
 
-   local TMPDIR=`mktemp -d /tmp/srpm_list_packages_XXXXXX`
+   local TMPDIR=$(mktemp -d /tmp/srpm_list_packages_XXXXXX)
 
    (
     cd $TMPDIR &>> /dev/null
@@ -2887,7 +2924,7 @@ srpm_list_packages () {
     rpm -i --root=$TMPDIR --nosignature $SRPM_FILE
    )
 
-   for SPEC in `find $TMPDIR -name '*.spec' | sort -V`; do
+   for SPEC in $(find $TMPDIR -name '*.spec' | sort -V); do
       spec_list_packages $SPEC
    done
     
@@ -2898,7 +2935,7 @@ srpm_list_packages () {
 srpm_list_versioned_packages () {
    local SRPM_FILE=$1
 
-   local TMPDIR=`mktemp -d /tmp/srpm_list_packages_XXXXXX`
+   local TMPDIR=$(mktemp -d /tmp/srpm_list_packages_XXXXXX)
 
    (
     cd $TMPDIR &>> /dev/null
@@ -2906,7 +2943,7 @@ srpm_list_versioned_packages () {
     rpm -i --root=$TMPDIR --nosignature $SRPM_FILE
    )
 
-   for SPEC in `find $TMPDIR -name '*.spec' | sort -V`; do
+   for SPEC in $(find $TMPDIR -name '*.spec' | sort -V); do
       spec_list_versioned_packages $SPEC
    done
 
@@ -2917,7 +2954,7 @@ srpm_list_versioned_packages () {
 srpm_list_ver_rel_packages () {
    local SRPM_FILE=$1 
    
-   local TMPDIR=`mktemp -d /tmp/srpm_list_packages_XXXXXX`
+   local TMPDIR=$(mktemp -d /tmp/srpm_list_packages_XXXXXX)
    
    (
     cd $TMPDIR &>> /dev/null
@@ -2925,7 +2962,7 @@ srpm_list_ver_rel_packages () {
     rpm -i --root=$TMPDIR --nosignature $SRPM_FILE
    )         
    
-   for SPEC in `find $TMPDIR -name '*.spec' | sort -V`; do
+   for SPEC in $(find $TMPDIR -name '*.spec' | sort -V); do
       spec_list_ver_rel_packages $SPEC
    done  
 
@@ -2936,7 +2973,7 @@ srpm_list_ver_rel_packages () {
 srpm_list_ver_rel_arch_packages () {
    local SRPM_FILE=$1 
    
-   local TMPDIR=`mktemp -d /tmp/srpm_list_packages_XXXXXX`
+   local TMPDIR=$(mktemp -d /tmp/srpm_list_packages_XXXXXX)
    
    (
     cd $TMPDIR &>> /dev/null
@@ -2944,7 +2981,7 @@ srpm_list_ver_rel_arch_packages () {
     rpm -i --root=$TMPDIR --nosignature $SRPM_FILE
    )         
    
-   for SPEC in `find $TMPDIR -name '*.spec' | sort -V`; do
+   for SPEC in $(find $TMPDIR -name '*.spec' | sort -V); do
       spec_list_ver_rel_arch_packages $SPEC
    done  
 
@@ -2955,7 +2992,7 @@ srpm_list_ver_rel_arch_packages () {
 srpm_build_requires () {
    local SRPM_FILE=$1
 
-   local TMPDIR=`mktemp -d /tmp/srpm_list_packages_XXXXXX`
+   local TMPDIR=$(mktemp -d /tmp/srpm_list_packages_XXXXXX)
 
    (
     cd $TMPDIR &>> /dev/null
@@ -2963,7 +3000,7 @@ srpm_build_requires () {
     rpm -i --root=$TMPDIR $SRPM_FILE
    )
 
-   for SPEC in `find $TMPDIR -name '*.spec' | sort -V`; do
+   for SPEC in $(find $TMPDIR -name '*.spec' | sort -V); do
       spec_build_requires $SPEC
    done
 
@@ -2978,7 +3015,7 @@ srpm_match_package_list () {
    local TARGET
    local PKG_NAME
 
-   for PKG_NAME in `srpm_list_packages "$SRPM_FILE"`; do
+   for PKG_NAME in $(srpm_list_packages "$SRPM_FILE"); do
        for TARGET in "${TARGET_LIST[@]}"; do
            if [ "$PKG_NAME" == "$TARGET" ]; then
                >&2 echo "found target '$TARGET' in file '$SRPM_FILE' as a package name"
@@ -2996,7 +3033,7 @@ srpm_match_package () {
    local SRPM_FILE=$2
    local PKG_NAME
 
-   for PKG_NAME in `srpm_list_packages "$SRPM_FILE"`; do
+   for PKG_NAME in $(srpm_list_packages "$SRPM_FILE"); do
        if [ "$PKG_NAME" == "$TARGET" ]; then
            echo "found target '$TARGET' in file '$SRPM_FILE' as a package name"
            return 0
@@ -3016,7 +3053,7 @@ srpm_match_target_list () {
    local SERVICE
    local PKG_NAME
 
-   NAME=`srpm_find_tag Name "$SRPM_FILE"`
+   NAME=$(srpm_find_tag Name "$SRPM_FILE")
    if [ $? -eq 0 ]; then
        for TARGET in "${TARGET_LIST[@]}"; do
            if [ "$NAME" == "$TARGET" ]; then
@@ -3032,7 +3069,7 @@ srpm_match_target_list () {
        done
    fi 
 
-   SERVICE=`srpm_find_tag Service "$SRPM_FILE"`
+   SERVICE=$(srpm_find_tag Service "$SRPM_FILE")
    if [ $? -eq 0 ]; then
        for TARGET in "${TARGET_LIST[@]}"; do
            if [ "$SERVICE" == "$TARGET" ]; then
@@ -3057,7 +3094,7 @@ srpm_match_target () {
    local SERVICE
    local PKG_NAME
 
-   NAME=`srpm_find_tag Name "$SRPM_FILE"`
+   NAME=$(srpm_find_tag Name "$SRPM_FILE")
    if [ $? -eq 0 ]; then
        if [ "$NAME" == "$TARGET" ]; then
            echo "found target '$TARGET' in file '$SRPM_FILE' as a name"
@@ -3065,7 +3102,7 @@ srpm_match_target () {
        fi
    fi
 
-   SERVICE=`srpm_find_tag Service "$SRPM_FILE"`
+   SERVICE=$(srpm_find_tag Service "$SRPM_FILE")
    if [ $? -eq 0 ]; then
        if [ "$SERVICE" == "$TARGET" ]; then
            echo "found target '$TARGET' in file '$SRPM_FILE' as a service"

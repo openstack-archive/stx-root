@@ -490,6 +490,9 @@ build_dir_srpm () {
    local TARGET_FOUND=""
    local RC=0
 
+   export SRPM_EXPORT_NAME=$NAME
+   export SRPM_EXPORT_VER=$VER
+
    local NEED_BUILD=0
 
    if [ "x$TARGETS" == "x" ]; then
@@ -1140,20 +1143,24 @@ reaper ()  {
                 reaped=$((reaped+1))
                 release_build_env $i 
                 if [ $ret -ne 0 ]; then
-                   # if [ $ret -eq 1 ]; then
-                      VERB="build"
-                      if [ $EDIT_FLAG ]; then
-                         VERB="edit"
+                   VERB="build"
+
+                   if [ $EDIT_FLAG -eq 1 ]; then
+                      VERB="edit"
+                      if [ $CLEAN_FLAG -eq 1 ]; then
+                         VERB="edit clean"
                       fi
-                      if [ $CLEAN_FLAG ]; then
-                         VERB="clean"
-                      fi
-                      sleep 1
-                      echo "ERROR: Failed to $VERB src.rpm from source at 'b$i'"
-                      cat "$LOG_DIR/$i" >> $LOG_DIR/errors
-                      echo "ERROR: Failed to $VERB src.rpm from source at 'b$i'" >> $LOG_DIR/errors
-                      echo "" >> $LOG_DIR/errors
-                   # fi
+                   fi
+
+                   if [ $CLEAN_FLAG -eq 1 ]; then
+                      VERB="clean"
+                   fi
+
+                   sleep 1
+                   echo "ERROR: Failed to $VERB src.rpm from source at 'b$i'"
+                   cat "$LOG_DIR/$i" >> $LOG_DIR/errors
+                   echo "ERROR: Failed to $VERB src.rpm from source at 'b$i'" >> $LOG_DIR/errors
+                   echo "" >> $LOG_DIR/errors
                    STOP_SCHEDULING=1
                fi
             fi
