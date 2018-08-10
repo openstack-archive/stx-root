@@ -72,3 +72,7 @@ traceroute
 # support for persistent sessions
 screen
 
+# Mellanox drivers
+rdma-core
+mlnx-ofa_kernel-modules
+mlnx-ofa_kernel-rt-modules
