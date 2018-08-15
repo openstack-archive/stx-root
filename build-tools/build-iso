@@ -8,6 +8,9 @@
 # It starts by building a basic "vanilla CentOS" ISO, and then adds our
 # packages to it.
 
+BUILD_ISO_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+source "${BUILD_ISO_DIR}/image-utils.sh"
+
 usage () {
     echo ""
     echo "Usage: "
@@ -273,6 +276,10 @@ function init_output_dir {
    \mkdir -p $OUTPUT_DIST_DIR/isolinux/EFI
    # This directory will contains files required for the PXE network installer
    \mkdir -p $OUTPUT_DIST_DIR/isolinux/pxeboot
+
+   echo "  Preparing package lists"
+   image_inc_list iso std centos > "${PKGLIST_TI}"
+   image_inc_list iso dev centos > "${PKGLIST_DEV}"
 
    echo "  Copying base files"
 
@@ -664,27 +671,27 @@ printf   "*************************\n\n"
 # Init variables
 init_vars
 check_vars
-PKGLIST_MINIMAL=$INTERNAL_REPO_ROOT/build-tools/build_iso/minimal_rpm_list.txt
-PKGLIST_TI=$INTERNAL_REPO_ROOT/build-tools/build_iso/image.inc
-PKGLIST_DEV=$INTERNAL_REPO_ROOT/build-tools/build_iso/image-dev.inc
+PKGLIST_MINIMAL="${INTERNAL_REPO_ROOT}/build-tools/build_iso/minimal_rpm_list.txt"
+PKGLIST_TI="${OUTPUT_DIR}/image.inc"
+PKGLIST_DEV="${OUTPUT_DIR}/image-dev.inc"
 
 # Create skeleton build dir
 init_output_dir
 
 # Create the vanilla DVD
 echo "Copying vanilla CentOS RPMs"
-install_pkg_list $PKGLIST_MINIMAL
+install_pkg_list "${PKGLIST_MINIMAL}"
 
 # Find all CGCS packages
 # SAL exit 0
 echo "Installing Titanium Cloud packages"
-install_pkg_list $PKGLIST_TI
+install_pkg_list "${PKGLIST_TI}"
 if [ $? -eq 2 ]; then
 	exit 1
 fi
 if [ "x${RELEASE_BUILD}" == "x" ]; then
     echo "Installing Titanium Cloud developer packages"
-    install_pkg_list ${PKGLIST_DEV}
+    install_pkg_list "${PKGLIST_DEV}"
     if [ $? -eq 2 ]; then
         exit 1
     fi
@@ -711,7 +718,7 @@ final_touches
 # Sign the ISO
 sign_iso
 
-make_report $PKGLIST_MINIMAL $PKGLIST_TI
+make_report "${PKGLIST_MINIMAL}" "${PKGLIST_TI}"
 
 # Check sanity
 FILESIZE=$(wc -c <"$OUTPUT_FILE")

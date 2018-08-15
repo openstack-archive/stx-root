@@ -21,7 +21,6 @@ RPM_TO_SRPM_MAP_FILE="$DEPENDANCY_DIR/rpm-to-srpm"
 SRPM_TO_RPM_MAP_FILE="$DEPENDANCY_DIR/srpm-to-rpm"
 
 UNBUILT_PATTERN_FILE="$MY_REPO/build-data/unbuilt_rpm_patterns"
-IMAGE_INC_FILE="$MY_REPO/build-tools/build_iso/image.inc"
 
 SIGN_SECURE_BOOT="sign-secure-boot"
 SIGN_SECURE_BOOT_LOG="sign-secure-boot.log"
@@ -29,8 +28,10 @@ SIGN_SECURE_BOOT_LOG="sign-secure-boot.log"
 export MOCK=/usr/bin/mock
 
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-source $DIR/spec-utils
-source $DIR/srpm-utils
+BUILD_RPMS_SERIAL_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+source "${BUILD_RPMS_SERIAL_DIR}/image-utils.sh"
+source "${BUILD_RPMS_SERIAL_DIR}/spec-utils"
+source "${BUILD_RPMS_SERIAL_DIR}/srpm-utils"
 
 HOME=$(pwd)
 
@@ -548,10 +549,8 @@ export MY_BUILD_ENVIRONMENT_FILE=$MY_BUILD_ENVIRONMENT.cfg
 export MY_BUILD_CFG=$MY_WORKSPACE/$MY_BUILD_ENVIRONMENT_FILE
 export MY_MOCK_ROOT=$MY_WORKSPACE/mock/root
 
-
-if [ "$BUILD_TYPE" != "std" ]; then
-   PKG_DIRS_FILE=centos_pkg_dirs_$BUILD_TYPE
-fi
+IMAGE_INC_FILE="${MY_WORKSPACE}/image.inc"
+image_inc_list iso ${BUILD_TYPE} ${DISTRO} > "${IMAGE_INC_FILE}"
 
 TARGETS=$@
 
@@ -645,7 +644,7 @@ export BUILD_CFG="$MY_BUILD_CFG"
 # Place build-time environement variables in mock environment
 echo "FORMAL_BUILD=$FORMAL_BUILD"
 echo "modify-build-cfg $BUILD_CFG"
-${DIR}/modify-build-cfg $BUILD_CFG
+${BUILD_RPMS_SERIAL_DIR}/modify-build-cfg $BUILD_CFG
 if [ $? -ne 0 ]; then
        echo "Could not modifiy $BUILD_CFG";
        exit 1
