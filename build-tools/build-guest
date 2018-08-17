@@ -1,10 +1,17 @@
 #!/bin/env bash
 
 #
+# Copyright (c) 2018 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+#
 # Build the tis-centos-image.img or tis-centos-image-rt.img file
 #
 
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+BUILD_GUEST_DIR="$(dirname "$(readlink -f "${BASH_SOURCE[0]}" )" )"
+source "${BUILD_GUEST_DIR}/image-utils.sh"
 
 # NOTE: TMP_DIR must end in '/'
 # NOTE: /tmp/ is now tmpfs like.  Can't be trusted across multiple mock commands
@@ -35,7 +42,7 @@ function init_vars {
    fi
 
    # Path to guest configuration
-   GUEST_BUILD_DIR=$DIR/build_guest
+   GUEST_BUILD_DIR="${BUILD_GUEST_DIR}/build_guest"
    GUEST_BUILD_CMD=$GUEST_BUILD_DIR/build-guest-image.py
    if [ $VERBOSE -eq 1 ]; then
        GUEST_BUILD_CMD="$GUEST_BUILD_CMD -x"
@@ -108,7 +115,7 @@ function create_rootfs {
     GUEST_ENV="${MY_BUILD_ENVIRONMENT}-guest"
     GUEST_CFG=$GUEST_DIR/$MY_BUILD_ENVIRONMENT_FILE
 
-    MY_BUILD_ENVIRONMENT=$GUEST_ENV ${DIR}/modify-build-cfg $GUEST_CFG
+    MY_BUILD_ENVIRONMENT=$GUEST_ENV "${BUILD_GUEST_DIR}/modify-build-cfg" $GUEST_CFG
     if [ $? -ne 0 ]; then
 	printf "   Error -- Could not update $GUEST_CFG\n";
 	exit 1
@@ -144,10 +151,10 @@ function create_rootfs {
 
     if [ $BUILD_MODE == 'std' ]; then
        INC_RPM_LIST=$(grep -v '^#' ${GUEST_BUILD_DIR}/rpm-install-list.txt)
-       TIS_RPM_LIST=$(grep -v '^#' ${GUEST_BUILD_DIR}/image.inc)
+       TIS_RPM_LIST=$(image_inc_list guest std centos)
     elif [ $BUILD_MODE == 'rt' ]; then
        INC_RPM_LIST=$(grep -v '^#' ${GUEST_BUILD_DIR}/rpm-install-list-rt.txt)
-       TIS_RPM_LIST=$(grep -v '^#' ${GUEST_BUILD_DIR}/image-rt.inc)
+       TIS_RPM_LIST=$(image_inc_list guest rt centos)
        EXTRA_REPOS="--enablerepo local-rt"
     else
        printf "   Error -- unknown BUILD_MODE '$BUILD_MODE'\n";
@@ -156,6 +163,9 @@ function create_rootfs {
 
     $MOCK -r $GUEST_CFG --install ${INC_RPM_LIST} ${TIS_RPM_LIST} ${EXTRA_REPOS}
     if [ $? -ne 0 ]; then
+        printf "=====\n"
+        cat $GUEST_DIR/mock/result/root.log | sed -n '/Error:/,$p' | sed '/Child return code was:/q'
+        printf "=====\n"
 	printf "   Error -- Failed to install RPM packages\n";
 	exit 1
     fi
@@ -260,7 +270,7 @@ function clean_guest {
     GUEST_CFG=$GUEST_DIR/$MY_BUILD_ENVIRONMENT_FILE
 
     if [ ! -e $GUEST_CFG ]; then
-	MY_BUILD_ENVIRONMENT=$GUEST_ENV ${DIR}/modify-build-cfg $GUEST_CFG
+	MY_BUILD_ENVIRONMENT=$GUEST_ENV "${BUILD_GUEST_DIR}/modify-build-cfg" $GUEST_CFG
 	if [ $? -ne 0 ]; then
 	    printf "   Error -- Could not update $GUEST_CFG\n";
 	    exit 1
