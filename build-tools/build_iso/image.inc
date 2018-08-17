@@ -42,6 +42,8 @@ smartmontools
 collectd
 puppet-collectd
 socat
+fm-rest-api
+python-fmclient
 
 # for realtime kernel
 rtctl
