@@ -16,6 +16,8 @@ fm-api 1.0
 fm-common 1.0
 fm-doc 1.0
 fm-mgr 1.0
+fm-rest-api 1.0
+python-fmclient 1.0
 io-monitor 1.0
 io-scheduler 1.0
 logmgmt 1.0
@@ -38,6 +40,7 @@ puppet-nova_api_proxy 1.0.0
 puppet-nuage_vswitch 1.0.0
 puppet-patching 1.0.0
 puppet-sysinv 1.0.0
+puppet-fm 1.0.0
 nova-utils 1.0
 tsconfig 1.0
 vm-topology 1.0
