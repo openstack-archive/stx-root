@@ -13,6 +13,21 @@
 BUILD_GUEST_DIR="$(dirname "$(readlink -f "${BASH_SOURCE[0]}" )" )"
 source "${BUILD_GUEST_DIR}/image-utils.sh"
 
+# Remind folks then need to be in the correct group to run mock commands
+# Note: cgts is our current alias for the mock group.  Should probably be
+# renamed as stx-build in a future update
+NEED_GROUP=cgts
+CURRENT_GID=$(id -g)
+NEED_GID=$(getent group $NEED_GROUP | cut -d: -f3)
+if [ $CURRENT_GID != $NEED_GID ]; then
+   echo "This command must be run using group '$NEED_GROUP'."
+   echo "Please run:"
+   echo "   newgrp $NEED_GROUP"
+   echo ""
+   echo "Then try again."
+   exit 1
+fi
+
 # NOTE: TMP_DIR must end in '/'
 # NOTE: /tmp/ is now tmpfs like.  Can't be trusted across multiple mock commands
 # TMP_DIR=/tmp/
