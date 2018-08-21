@@ -1,0 +1,9 @@
+Code-Review+2: Jason McKenna <jason.mckenna@windriver.com>
+Workflow+1: Jason McKenna <jason.mckenna@windriver.com>
+Code-Review+1: Don Penney <don.penney@windriver.com>
+Verified+2: Zuul
+Submitted-by: Zuul
+Submitted-at: Tue, 21 Aug 2018 19:03:24 +0000
+Reviewed-on: https://review.openstack.org/594361
+Project: openstack/stx-root
+Branch: refs/heads/master
