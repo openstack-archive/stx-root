@@ -69,3 +69,6 @@ zip
 unzip
 traceroute
 
+# support for persistent sessions
+screen
+
