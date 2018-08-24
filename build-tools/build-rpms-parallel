@@ -19,8 +19,8 @@ export DISTRO="centos"
 ABSOLUTE_MAX_WORKERS=4
 
 # Maximum space in gb for each tmpfs based parallel build environment.
-#  Note: currently 10 gb is sufficient to build everything except ceph
-MAX_MEM_PER_WORKER=10
+#  Note: currently 11 gb is sufficient to build everything except ceph
+MAX_MEM_PER_WORKER=11
 
 # Minimum space in gb for each tmpfs based parallel build environment
 #  Note: tmpfs is typically 2.5 gb when compiling many small jobs
