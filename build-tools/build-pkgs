@@ -1,8 +1,16 @@
 #!/bin/bash
 
-# This program is a wrapper around build-pkgs-parallel and build-pkgs-serial
+#
+# Copyright (c) 2018 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
 
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+#
+# This program is a wrapper around build-pkgs-parallel and build-pkgs-serial
+#
+
+BUILD_PKGS_DIR="$(dirname "$(readlink -f "${BASH_SOURCE[0]}" )" )"
 
 usage () {
     echo ""
@@ -22,6 +30,15 @@ done
 which mock_tmpfs_umount >> /dev/null
 if [ $? -ne 0 ]; then
     SERIAL_FLAG=1
+fi
+
+# Make sure we have a dependency cache
+DEP_CACHE="$MY_REPO/cgcs-tis-repo/dependancy-cache"
+if [ ! -d $DEP_CACHE ]; then
+    echo "Dependency cache is missing.  Creating it now."
+    $BUILD_PKGS_DIR/create_dependancy_cache.py > $MY_WORKSPACE/create_dependancy_cache.log
+    echo "Dependency cache created."
+    echo ""
 fi
 
 if [ $SERIAL_FLAG -eq 1 ]; then

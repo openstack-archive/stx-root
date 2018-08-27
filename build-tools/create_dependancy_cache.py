@@ -1,5 +1,43 @@
 #!/usr/bin/python
 
+#
+# Copyright (c) 2018 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+#
+# Create a RPM dependency cache frpm the RPMS found in
+# 1) $MY_REPO/cgcs-centos-repo
+# 2) $MY_WORKSPACE/$BUILD_TYPE/rpmbuild/
+#
+# Cache files are written to $MY_REPO/cgcs-tis-repo/dependancy-cache
+# unless an alternate path is supplied.
+#
+# The cache is a set of files that are easily digested by 
+# common shell script tools.  Each file has format
+#   <rpm-name>;<comma-seperated-list-of-rpm-names>
+#
+# The files created are:
+#   RPM-direct-descendants       RPMS that have a direct Requires on X
+#   RPM-transitive-descendants   RPMS that have a possibly indirect need for X
+#
+#   RPM-direct-requires          RPMS directly Required by X
+#   RPM-transitive-requires      RPMS possibly indirectly Required by X
+#
+#   SRPM-direct-descendants      SRPMS whos RPMS have a direct Requires on RPMS built by X
+#   SRPM-transitive-descendants  SRPMS whos RPMS have a possibly indirect need for RPMS built by X
+#
+#   SRPM-direct-requires         SRPMS whos RPMS satisfy a direct BuildRequires of X
+#   SRPM-transitive-requires     SRPMS whos RPMS satisfy an indirect BuildRequires of X
+#
+#   SRPM-direct-requires-rpm      RPMS that satisfy a direct BuildRequires of X
+#   SRPM-transitive-requires-rpm  RPMS that satisfy an indirect BuildRequires of X
+#
+#   rpm-to-srpm                   Map RPM back to the SRPM that created it
+#   srpm-to-rpm                   Map a SRPM to the set of RPMS it builds
+#
+
 import xml.etree.ElementTree as ET
 import fnmatch
 import os
@@ -29,39 +67,27 @@ if not os.path.isdir(repodata_dir):
 
 publish_cache_dir="%s/cgcs-tis-repo/dependancy-cache" % os.environ['MY_REPO']
 centos_repo_dir="%s/cgcs-centos-repo" % os.environ['MY_REPO']
-tis_repo_dir="%s/cgcs-tis-repo" % os.environ['MY_REPO']
+
 workspace_repo_dirs={}
 for rt in rpm_types:
-   workspace_repo_dirs[rt]={}
-   for bt in build_types:
-      workspace_repo_dirs[rt][bt]="%s/%s/rpmbuild/%sS" % (os.environ['MY_WORKSPACE'], bt, rt)
+    workspace_repo_dirs[rt]={}
+    for bt in build_types:
+        workspace_repo_dirs[rt][bt]="%s/%s/rpmbuild/%sS" % (os.environ['MY_WORKSPACE'], bt, rt)
 
 if not os.path.isdir(os.environ['MY_REPO']):
-   print("ERROR: directory not found MY_REPO=%s" % os.environ['MY_REPO'])
-   sys.exit(1)
+    print("ERROR: directory not found MY_REPO=%s" % os.environ['MY_REPO'])
+    sys.exit(1)
 
 if not os.path.isdir(centos_repo_dir):
-   print("ERROR: directory not found %s" % centos_repo_dir)
-   sys.exit(1)
-
-if not os.path.isdir(tis_repo_dir):
-   print("ERROR: directory not found %s" % tis_repo_dir)
-   sys.exit(1)
-
-# bin_rpm_mirror_roots = ["%s/fedora/epel/7" % repodata_dir, 
-#                         "%s/CentOS/7.2.1511" % repodata_dir, 
-#                         "%s/CentOS/tis-r3/" % repodata_dir ]
-
-# src_rpm_mirror_roots = ["%s/fedora/dl.fedoraproject.org/pub/epel/7/SRPMS" % repodata_dir, 
-#                         "%s/CentOS/vault.centos.org/7.2.1511" % repodata_dir, 
-#                         "%s/CentOS/tis-r3/Source" % repodata_dir ]
+    print("ERROR: directory not found %s" % centos_repo_dir)
+    sys.exit(1)
 
 bin_rpm_mirror_roots = ["%s/Binary" % centos_repo_dir]
 src_rpm_mirror_roots = ["%s/Source" % centos_repo_dir]
 
 for bt in build_types:
-   bin_rpm_mirror_roots.append(workspace_repo_dirs['RPM'][bt])
-   src_rpm_mirror_roots.append(workspace_repo_dirs['SRPM'][bt])
+    bin_rpm_mirror_roots.append(workspace_repo_dirs['RPM'][bt])
+    src_rpm_mirror_roots.append(workspace_repo_dirs['SRPM'][bt])
 
 parser = OptionParser('create_dependancy_cache')
 parser.add_option('-c', '--cache_dir', action='store', type='string',
@@ -82,9 +108,10 @@ if options.third_party_repo_dir:
         print("ERROR: directory not found %s" % third_party_repo_dir)
         sys.exit(1)
 
+# Create directory if required
 if not os.path.isdir(publish_cache_dir):
-    print("ERROR: directory not found %s" % publish_cache_dir)
-    sys.exit(1)
+    print("Creating directory: %s" % publish_cache_dir)
+    os.makedirs(publish_cache_dir, 0755)
 
 # The Main data structure
 pkg_data={}
@@ -156,19 +183,21 @@ def get_repo_primary_data_list(rpm_type='RPM', arch_list=default_arch_list):
 
     if rpm_type == 'RPM':
         for d in bin_rpm_mirror_roots:
-            sub_list = file_search(d, 'repodata', 25)
-            rpm_repodata_roots.extend(sub_list)
+            if os.path.isdir(d):
+                sub_list = file_search(d, 'repodata', 25)
+                rpm_repodata_roots.extend(sub_list)
     elif rpm_type == 'SRPM':
         for d in src_rpm_mirror_roots:
-            sub_list = file_search(d, 'repodata', 5)
-            rpm_repodata_roots.extend(sub_list)
+            if os.path.isdir(d):
+                sub_list = file_search(d, 'repodata', 5)
+                rpm_repodata_roots.extend(sub_list)
     else:
         print "invalid rpm_type '%s', valid types are %s" % (rpm_type, str(rpm_types))
         return repodata_list
 
     for d in rpm_repodata_roots:
-       sub_list = file_search(d, '*primary.xml.gz', 2)
-       repodata_list.extend(sub_list)
+        sub_list = file_search(d, '*primary.xml.gz', 2)
+        repodata_list.extend(sub_list)
    
     return repodata_list
 
@@ -183,12 +212,14 @@ def get_repo_filelists_data_list(rpm_type='RPM', arch_list=default_arch_list):
 
     if rpm_type == 'RPM':
         for d in bin_rpm_mirror_roots:
-            sub_list = file_search(d, 'repodata', 25)
-            rpm_repodata_roots.extend(sub_list)
+            if os.path.isdir(d):
+                sub_list = file_search(d, 'repodata', 25)
+                rpm_repodata_roots.extend(sub_list)
     elif rpm_type == 'SRPM':
         for d in src_rpm_mirror_roots:
-            sub_list = file_search(d, 'repodata', 5)
-            rpm_repodata_roots.extend(sub_list)
+            if os.path.isdir(d):
+                sub_list = file_search(d, 'repodata', 5)
+                rpm_repodata_roots.extend(sub_list)
     else:
         print "invalid rpm_type '%s', valid types are %s" % (rpm_type, str(rpm_types))
         return repodata_list
@@ -348,7 +379,7 @@ def calulate_all_direct_requires_and_descendants(rpm_type='RPM'):
         calulate_pkg_direct_requires_and_descendants(name, rpm_type=rpm_type)
 
 def calulate_pkg_direct_requires_and_descendants(name, rpm_type='RPM'):
-    print "SAL: %s needs:" % name
+    print "%s needs:" % name
     if not rpm_type in pkg_data:
         print "Error: unknown rpm_type '%s'" % rpm_type
         return
@@ -405,7 +436,7 @@ def calulate_pkg_direct_requires_and_descendants(name, rpm_type='RPM'):
             if not name in pkg_data[rpm_type]['pkg_direct_descendants'][pro]:
                 pkg_data[rpm_type]['pkg_direct_descendants'][pro].append(name)
 
-        print "SAL:    %s -> %s" % (req, pro)
+        print "    %s -> %s" % (req, pro)
 
 
 
