@@ -28,8 +28,8 @@ export GIT_LIST=$(git_list "$(dirname "${MY_REPO}")")
 # GIT_LIST_REL: A list of root directories for all the gits under $MY_REPO/..
 #               as relative paths.
 export GIT_LIST_REL=$(for p in $GIT_LIST; do
-                          echo .${p#$(dirname ${MY_REPO})};
-                      done)
+                        echo .${p#$(dirname ${MY_REPO})};
+                        done)
 
 
 #
