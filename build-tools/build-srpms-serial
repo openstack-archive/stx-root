@@ -11,7 +11,7 @@ source $BUILD_SRPMS_SERIAL_DIR/srpm-utils
 source $BUILD_SRPMS_SERIAL_DIR/classify
 
 
-INITIAL_DIR=`pwd`
+INITIAL_DIR=$(pwd)
 export DISTRO="centos"
 SRPM_SCRIPT="build_srpm"
 SRPM_DATA="build_srpm.data"
@@ -286,7 +286,7 @@ build_dir () {
    export SPECS_BASE="$PKG_BASE/$ORIG_SPECS_PATH"
    local RC
 
-   local ORIG_DIR=`pwd`
+   local ORIG_DIR=$(pwd)
    # echo "build_dir: PKG_BASE=$PKG_BASE"
 
    cd "$PKG_BASE"
@@ -333,23 +333,23 @@ build_dir () {
       #
       # Other prefixes (file:, http:, whatever:)are unsupported at this time
 
-      for p in `grep -v '^#' $SRPM_LIST_PATH | grep -v '^$'`; do
+      for p in $(grep -v '^#' $SRPM_LIST_PATH | grep -v '^$'); do
          # absolute path source rpms
          echo "$p" | grep "^/" >/dev/null && ORIG_SRPM_PATH=$p
 
          if [ "${ORIG_SRPM_PATH}x" == "x" ]; then
             # handle repo: definitions
-            echo "$p" | grep "^repo:" >/dev/null && ORIG_SRPM_PATH=`echo $p | sed "s%^repo:%$REPO_DOWNLOADS_ROOT/%"`
+            echo "$p" | grep "^repo:" >/dev/null && ORIG_SRPM_PATH=$(echo $p | sed "s%^repo:%$REPO_DOWNLOADS_ROOT/%")
+         fi
+
+         if [ "${ORIG_SRPM_PATH}x" == "x" ]; then
+            # handle 3rd_party: definitions
+            echo "$p" | grep "^3rd_party:" >/dev/null && ORIG_SRPM_PATH=$(echo $p | sed "s%^3rd_party:%$THIRD_PARTY_ROOT/%")
          fi
 
          if [ "${ORIG_SRPM_PATH}x" == "x" ]; then
             # handle mirror: definitions
-            echo "$p" | grep "^3rd_party:" >/dev/null && ORIG_SRPM_PATH=`echo $p | sed "s%^3rd_party:%$THIRD_PARTY_ROOT/%"`
-         fi
-
-         if [ "${ORIG_SRPM_PATH}x" == "x" ]; then
-            # handle mirror: definitions
-            echo "$p" | grep "^mirror:" >/dev/null && ORIG_SRPM_PATH=`echo $p | sed "s%^mirror:%$MIRROR_ROOT/%" |  sed "s#CentOS/tis-r3-CentOS/kilo/##" | sed "s#CentOS/tis-r3-CentOS/mitaka/##"`
+            echo "$p" | grep "^mirror:" >/dev/null && ORIG_SRPM_PATH=$(echo $p | sed "s%^mirror:%$MIRROR_ROOT/%" |  sed "s#CentOS/tis-r3-CentOS/kilo/##" | sed "s#CentOS/tis-r3-CentOS/mitaka/##")
          fi
 
          if [ "${ORIG_SRPM_PATH}x" == "x" ]; then
@@ -374,11 +374,11 @@ build_dir () {
       \rm -f $f
    done
 
-   SPEC_COUNT=`find $ORIG_SPECS_PATH -name '*.spec' | wc -l`
+   SPEC_COUNT=$(find $ORIG_SPECS_PATH -name '*.spec' | wc -l)
    if [ $SPEC_COUNT -eq 0 ]; then
       if [ -f $ORIG_SPECS_PATH/spec_path ]; then
          SPECS_BASE=$SRC_BASE/$(cat $SPECS_BASE/spec_path)
-         SPEC_COUNT=`find $SPECS_BASE -maxdepth 1 -name '*.spec' | wc -l`
+         SPEC_COUNT=$(find $SPECS_BASE -maxdepth 1 -name '*.spec' | wc -l)
       fi
    fi
 
@@ -431,13 +431,13 @@ clean_srpm_dir () {
        INPUTS_TO_CLEAN=""
    fi
 
-   for SRPM_PATH in `find "$DIR" -name '*.src.rpm'`; do
+   for SRPM_PATH in $(find "$DIR" -name '*.src.rpm'); do
        SRPM_FILE=$(basename $SRPM_PATH)
        SRPM_NAME=$(rpm -q --queryformat '%{NAME}\n' --nosignature -p $SRPM_PATH 2>> /dev/null)
-       rm -fv $SRPM_PATH $SRPM_OUT/$SRPM_FILE  
+       \rm -fv $SRPM_PATH $SRPM_OUT/$SRPM_FILE
        if [ -d $SRPM_ASSEMBLE/$SRPM_NAME ]; then
            echo "rm -rf $SRPM_ASSEMBLE/$SRPM_NAME"
-           rm -rf $SRPM_ASSEMBLE/$SRPM_NAME
+           \rm -rf $SRPM_ASSEMBLE/$SRPM_NAME
        fi
 
        local d
@@ -446,7 +446,7 @@ clean_srpm_dir () {
        local spec_name
 
        for d in $(find $BUILD_INPUTS -type d -name "${SRPM_NAME}*") ;do
-           local src_d=$(echo $d | sed "s#^$BUILD_INPUTS/#$MY_REPO/#")
+           src_d=$(echo $d | sed "s#^$BUILD_INPUTS/#$MY_REPO/#")
 
            for spec in $(find $src_d/${DISTRO} -name '*.spec'); do
                spec_name=$(spec_find_tag Name $spec)
@@ -456,10 +456,10 @@ clean_srpm_dir () {
            done
        done
 
-       for SRPM_OUT_PATH in `ls -1 $SRPM_OUT/$SRPM_NAME* 2>> /dev/null`; do
+       for SRPM_OUT_PATH in $(ls -1 $SRPM_OUT/$SRPM_NAME*.src.rpm 2>> /dev/null); do
            SRPM_OUT_NAME=$(rpm -q --queryformat '%{NAME}\n' -p $SRPM_OUT_PATH 2>> /dev/null)
            if [ "$SRPM_NAME" == "$SRPM_OUT_NAME" ]; then
-              rm -fv $SRPM_OUT_PATH
+              \rm -fv $SRPM_OUT_PATH
            fi
        done
    done
@@ -468,7 +468,7 @@ clean_srpm_dir () {
        for d in $INPUTS_TO_CLEAN; do
            if [ -d $d ]; then
                echo "rm -rf $d"
-               rm -rf $d
+               \rm -rf $d
            fi
        done
    fi
@@ -478,9 +478,8 @@ build_dir_srpm () {
    local ORIG_SRPM_PATH=$1
 
    local ORIG_SRPM=$(basename $ORIG_SRPM_PATH)
-   local NAME=`rpm -q --queryformat '%{NAME}\n' --nosignature -p $ORIG_SRPM_PATH`
-   local VER=`rpm -q --queryformat '%{VERSION}\n' --nosignature -p $ORIG_SRPM_PATH`
-   local PKG_NAME_VER=`rpm -q --queryformat '%{NAME}-%{VERSION}-%{RELEASE}\n' --nosignature -p $ORIG_SRPM_PATH`
+   local NAME=$(rpm -q --queryformat '%{NAME}\n' --nosignature -p $ORIG_SRPM_PATH)
+   local PKG_NAME_VER=$(rpm -q --queryformat '%{NAME}-%{VERSION}-%{RELEASE}\n' --nosignature -p $ORIG_SRPM_PATH
    local PKG_DIR="$NAME"
    local TARGET_FOUND=""
    local RC=0
@@ -528,7 +527,7 @@ build_dir_srpm () {
 
       if [ -d $PKG_ROOT_DIR ]; then
           echo "rm -rf $PKG_ROOT_DIR"
-          rm -rf "$PKG_ROOT_DIR"
+          \rm -rf "$PKG_ROOT_DIR"
       fi
    else
       #build
@@ -567,23 +566,23 @@ build_dir_srpm () {
       local BUILD_NEEDED=2
       local SRPM_OUT_PATH2
 
-      for SRPM_PATH in `find "$FULL_BUILD_DIR/SRPMS" -name '*.src.rpm' | sort -V`; do
+      for SRPM_PATH in $(find "$FULL_BUILD_DIR/SRPMS" -name '*.src.rpm' | sort -V); do
          if [ $BUILD_NEEDED -eq 2 ]; then
             BUILD_NEEDED=0
          fi
 
          b=$(basename $SRPM_PATH)
-         SRPM_OUT_PATH2=`find $SRPM_OUT -name $b`
+         SRPM_OUT_PATH2=$(find $SRPM_OUT -name $b)
          if [ "x$SRPM_OUT_PATH2" == "x" ]; then
             BUILD_NEEDED=1
          fi
          
-         n=`find $PKG_BASE -type f -cnewer $SRPM_PATH | wc -l`
+         n=$(find $PKG_BASE -type f -cnewer $SRPM_PATH | wc -l)
          if [ $n -gt 0 ]; then
             BUILD_NEEDED=1
          fi
 
-         n=`find $ORIG_SRPM_PATH -type f -cnewer $SRPM_PATH | wc -l`
+         n=$(find $ORIG_SRPM_PATH -type f -cnewer $SRPM_PATH | wc -l)
          if [ $n -gt 0 ]; then
             BUILD_NEEDED=1
          fi
@@ -596,7 +595,7 @@ build_dir_srpm () {
             # NOTE: SRC_DIR is not honored in this build path
 
             if [ "x$COPY_LIST" != "x" ]; then
-               n=`find $COPY_LIST -type f -cnewer $SRPM_PATH | wc -l`
+               n=$(find $COPY_LIST -type f -cnewer $SRPM_PATH | wc -l)
                if [ $n -gt 0 ]; then
                   BUILD_NEEDED=1
                fi
@@ -623,8 +622,8 @@ build_dir_srpm () {
          clean_srpm_dir "$FULL_BUILD_DIR/SRPMS"
 
          if [ -d $PKG_ROOT_DIR ]; then
-            echo "arf rm -rf $PKG_ROOT_DIR"
-            rm -rf $PKG_ROOT_DIR
+            echo "rm -rf $PKG_ROOT_DIR"
+            \rm -rf $PKG_ROOT_DIR
          fi
       fi
 
@@ -655,7 +654,11 @@ build_dir_srpm () {
          return 0
       fi
 
-      AGE=`find $PKG_BASE $ORIG_SRPM_PATH -type f -exec stat --format '%Y' "{}" \; | grep -v '[/][.]git$' | grep -v '[/][.]git[/]' | sort -nr | head -n 1`
+      #
+      # Find age of youngest input file.
+      # We will apply this as the creation/modification timestamp of the src.rpm we produce.
+      #
+      AGE=$(find $PKG_BASE $ORIG_SRPM_PATH -type f -exec stat --format '%Y' "{}" \; | grep -v '[/][.]git$' | grep -v '[/][.]git[/]' | sort -nr | head -n 1)
       if [ -f $PKG_BASE/$DATA ]; then
          AGE2=$(
                cd $PKG_BASE
@@ -673,7 +676,7 @@ build_dir_srpm () {
                if [ "x$PATH_LIST" == "x" ]; then
                   echo "0"
                else
-                  AGE2=`find $PATH_LIST -type f -exec stat --format '%Y' "{}" \; | grep -v '[/][.]git$' | grep -v '[/][.]git[/]' | sort -nr | head -n 1`
+                  AGE2=$(find $PATH_LIST -type f -exec stat --format '%Y' "{}" \; | grep -v '[/][.]git$' | grep -v '[/][.]git[/]' | sort -nr | head -n 1)
                   echo  "$AGE2"
                fi
                )
@@ -708,7 +711,7 @@ build_dir_srpm () {
       fi
 
       TS=$(date -d @$AGE +%Y-%m-%dT%H:%M:%S)
-      for s in `find $FULL_BUILD_DIR/SRPMS -name '*.src.rpm'`; do
+      for s in $(find $FULL_BUILD_DIR/SRPMS -name '*.src.rpm'); do
          \cp -L -f -v $s $SRPM_OUT/
          ss=$(basename $s)
          touch $SRPM_OUT/$ss --date=$TS
@@ -762,7 +765,7 @@ build_dir_spec () {
       done
    else
       TARGET_LIST=( $TARGETS )
-      for f in `find $SPECS_BASE -maxdepth 1 -name '*.spec' 2>> /dev/null`; do
+      for f in $(find $SPECS_BASE -maxdepth 1 -name '*.spec' 2>> /dev/null); do
          TARGET_FOUND=$(spec_match_target_list TARGET_LIST "$f" 2>> /dev/null)
          if [ $? -eq 0 ]; then
             echo "found target '$TARGET_FOUND' in '$f'"
@@ -807,7 +810,7 @@ build_dir_spec () {
 
          if [ -d $PKG_ROOT_DIR ]; then
              echo "rm -rf $PKG_ROOT_DIR"
-             rm -rf "$PKG_ROOT_DIR"
+             \rm -rf "$PKG_ROOT_DIR"
          fi
       else
          # build
@@ -847,18 +850,18 @@ build_dir_spec () {
              fi
          fi
 
-         for SRPM_PATH2 in `find "$RPMBUILD_BASE/SRPMS" -name '*.src.rpm' | sort -V`; do
+         for SRPM_PATH2 in $(find "$RPMBUILD_BASE/SRPMS" -name '*.src.rpm' | sort -V); do
             if [ $BUILD_NEEDED -eq 2 ]; then
                BUILD_NEEDED=0
             fi
 
             b=$(basename $SRPM_PATH2)
-            SRPM_OUT_PATH2=`find $SRPM_OUT -name $b`
+            SRPM_OUT_PATH2=$(find $SRPM_OUT -name $b)
             if [ "x$SRPM_OUT_PATH2" == "x" ]; then
                BUILD_NEEDED=1
             fi
 
-            n=`find $PKG_BASE -type f -cnewer $SRPM_PATH2 | wc -l`
+            n=$(find $PKG_BASE -type f -cnewer $SRPM_PATH2 | wc -l)
             if [ $n -gt 0 ]; then
                BUILD_NEEDED=1
             fi
@@ -869,7 +872,7 @@ build_dir_spec () {
                BUILD_NEEDED=0
                if [ "x$SRC_DIR" != "x" ]; then
                   if [ -d "$SRC_DIR" ]; then
-                     n=`find $SRC_DIR -type f -cnewer $SRPM_PATH2 | grep -v '[/][.]git$' | grep -v '[/][.]git[/]' | wc -l`
+                     n=$(find $SRC_DIR -type f -cnewer $SRPM_PATH2 | grep -v '[/][.]git$' | grep -v '[/][.]git[/]' | wc -l)
                      if [ $n -gt 0 ]; then
                         BUILD_NEEDED=1
                      fi
@@ -877,14 +880,14 @@ build_dir_spec () {
                fi
 
                if [ "x$COPY_LIST" != "x" ]; then
-                  n=`find $COPY_LIST -type f -cnewer $SRPM_PATH2 | wc -l`
+                  n=$(find $COPY_LIST -type f -cnewer $SRPM_PATH2 | wc -l)
                   if [ $n -gt 0 ]; then
                      BUILD_NEEDED=1
                   fi
                fi
 
                if [ "x$COPY_LIST_TO_TAR" != "x" ]; then
-                  n=`find $COPY_LIST_TO_TAR -type f -cnewer $SRPM_PATH2 | wc -l`
+                  n=$(find $COPY_LIST_TO_TAR -type f -cnewer $SRPM_PATH2 | wc -l)
                   if [ $n -gt 0 ]; then
                      BUILD_NEEDED=1
                   fi
@@ -942,7 +945,7 @@ build_dir_spec () {
          fi
          if [ -d $RPMBUILD_BASE ]; then
              echo "rm -rf $RPMBUILD_BASE"
-             rm -rf "$RPMBUILD_BASE"
+             \rm -rf "$RPMBUILD_BASE"
          fi
 
          echo "mkdir -p $WORK_BASE $SRPM_PATH $SPEC_PATH $SOURCES_PATH"
@@ -969,8 +972,11 @@ build_dir_spec () {
             exit 1
          fi
 
-
-         AGE=`find $PKG_BASE -type f -exec stat --format '%Y' "{}" \; | grep -v '[/][.]git$' | grep -v '[/][.]git[/]' | sort -nr | head -n 1`
+         #
+         # Find age of youngest input file.
+         # We will apply this as the creation/modification timestamp of the src.rpm we produce.
+         #
+         AGE=$(find $PKG_BASE -type f -exec stat --format '%Y' "{}" \; | grep -v '[/][.]git$' | grep -v '[/][.]git[/]' | sort -nr | head -n 1)
          if [ -f $PKG_BASE/$DATA ]; then
             AGE2=$(
                   cd $PKG_BASE
@@ -992,7 +998,7 @@ build_dir_spec () {
                   if [ "x$PATH_LIST" == "x" ]; then
                      echo "0"
                   else
-                     AGE2=`find $PATH_LIST -type f -exec stat --format '%Y' "{}" \; | grep -v '[/][.]git$' | grep -v '[/][.]git[/]' | sort -nr | head -n 1`
+                     AGE2=$(find $PATH_LIST -type f -exec stat --format '%Y' "{}" \; | grep -v '[/][.]git$' | grep -v '[/][.]git[/]' | sort -nr | head -n 1)
                      echo  "$AGE2"
                   fi
                   )
@@ -1002,7 +1008,7 @@ build_dir_spec () {
          fi
 
          TS=$(date -d @$AGE +%Y-%m-%dT%H:%M:%S)
-         for s in `find $SRPM_PATH -name '*.src.rpm'`; do
+         for s in $(find $SRPM_PATH -name '*.src.rpm'); do
              \cp -L -f $s $SRPM_OUT/
              ss=$(basename $s)
              touch $SRPM_OUT/$ss --date=$TS
@@ -1042,7 +1048,7 @@ build_dir_spec () {
 echo "$CMDLINE"
 
 if [ -L $BUILD_ROOT/repo ]; then
-    REPO_DEST=`readlink $BUILD_ROOT/repo`
+    REPO_DEST=$(readlink $BUILD_ROOT/repo)
     if [ "$REPO_DEST" != "$SRC_ROOT" ]; then
         echo "Error: MY_REPO changed since last build"
         echo "   old path: $REPO_DEST"
@@ -1087,7 +1093,7 @@ if [ $EDIT_FLAG -eq 0 ]; then
     fi
 fi
 
-for g in `find "$SRC_BASE" -type d -name .git | sort -V`; do
+for g in $(find "$SRC_BASE" -type d -name .git | sort -V); do
    GIT_ROOT=$(dirname $g)
    export GIT_BASE="$GIT_ROOT"
    for p in $(cat $GIT_ROOT/$PKG_DIRS_FILE 2>> /dev/null); do
@@ -1130,39 +1136,39 @@ if [ $ALL -eq 1 ]; then
     echo
     echo "Auditing for obsolete srpms"
     PACKAGES_CONSIDERED=""
-    for g in `find $SRC_BASE -type d -name .git | sort -V`; do
+    for g in $(find $SRC_BASE -type d -name .git | sort -V); do
         GIT_ROOT=$(dirname $g)
         for p in $(cat $GIT_ROOT/$PKG_DIRS_FILE 2>> /dev/null); do
             src_dir="$GIT_ROOT/$p"
             if [ -d $src_dir ]; then
                 if [ -d $src_dir/$DISTRO ]; then
 
-                    for f in `find $src_dir/${DISTRO} -name '*.spec' | sort -V`; do
-                        NAME=`spec_find_tag Name "$f" 2>> /dev/null`
+                    for f in $(find $src_dir/${DISTRO} -name '*.spec' | sort -V); do
+                        NAME=$(spec_find_tag Name "$f" 2>> /dev/null)
                         if [ $? -eq 0 ]; then
                             PACKAGES_CONSIDERED="$PACKAGES_CONSIDERED $NAME"
                         fi
                     done
                     if [ -f $src_dir/$SRPM_LIST_PATH ]; then
 
-                        for p in `grep -v '^#' $src_dir/$SRPM_LIST_PATH | grep -v '^$'`; do
+                        for p in $(grep -v '^#' $src_dir/$SRPM_LIST_PATH | grep -v '^$'); do
                            ORIG_SRPM_PATH=""
                            # absolute path source rpms
                            echo "$p" | grep "^/" >/dev/null && ORIG_SRPM_PATH=$p
 
                            if [ "${ORIG_SRPM_PATH}x" == "x" ]; then
                               # handle repo: definitions
-                              echo "$p" | grep "^repo:" >/dev/null && ORIG_SRPM_PATH=`echo $p | sed "s%^repo:%$REPO_DOWNLOADS_ROOT/%"`
+                              echo "$p" | grep "^repo:" >/dev/null && ORIG_SRPM_PATH=$(echo $p | sed "s%^repo:%$REPO_DOWNLOADS_ROOT/%")
                            fi
 
                            if [ "${ORIG_SRPM_PATH}x" == "x" ]; then
-                              # handle repo: definitions
-                              echo "$p" | grep "^3rd_party:" >/dev/null && ORIG_SRPM_PATH=`echo $p | sed "s%^3rd_party:%$THIRD_PARTY_ROOT/%"`
+                              # handle 3rd_party: definitions
+                              echo "$p" | grep "^3rd_party:" >/dev/null && ORIG_SRPM_PATH=$(echo $p | sed "s%^3rd_party:%$THIRD_PARTY_ROOT/%")
                            fi
 
                            if [ "${ORIG_SRPM_PATH}x" == "x" ]; then
                               # handle mirror: definitions
-                              echo "$p" | grep "^mirror:" >/dev/null && ORIG_SRPM_PATH=`echo $p | sed "s%^mirror:%$MIRROR_ROOT/%" | sed "s#CentOS/tis-r3-CentOS/kilo/##" | sed "s#CentOS/tis-r3-CentOS/mitaka/##"`
+                              echo "$p" | grep "^mirror:" >/dev/null && ORIG_SRPM_PATH=$(echo $p | sed "s%^mirror:%$MIRROR_ROOT/%" | sed "s#CentOS/tis-r3-CentOS/kilo/##" | sed "s#CentOS/tis-r3-CentOS/mitaka/##")
                            fi
 
                            if [ "${ORIG_SRPM_PATH}x" == "x" ]; then
@@ -1172,7 +1178,7 @@ if [ $ALL -eq 1 ]; then
                            fi
 
                            if [ -f $ORIG_SRPM_PATH ]; then
-                               NAME=`rpm -q --queryformat '%{NAME}\n' -p $ORIG_SRPM_PATH 2>> /dev/null`
+                               NAME=$(rpm -q --queryformat '%{NAME}\n' -p $ORIG_SRPM_PATH 2>> /dev/null)
                                if [ $? -eq 0 ]; then
                                    PACKAGES_CONSIDERED="$PACKAGES_CONSIDERED $NAME"
                                fi
@@ -1201,11 +1207,11 @@ if [ $ALL -eq 1 ]; then
                 fi
                 if [ -d $INPUT_DIR ]; then
                     echo "rm -rf $r"
-                    rm -rf $r
+                    \rm -rf $r
                 fi
             done
             if [ -f $r ]; then
-                rm -f -v $r
+                \rm -f -v $r
             fi
         fi
     done
@@ -1213,17 +1219,17 @@ fi
 
 if [ $CLEAN_FLAG -eq 1 ]; then
     if [ $ALL -eq 1 ]; then
-       rm -rf $BUILD_INPUTS 
+       \rm -rf $BUILD_INPUTS
     fi
 fi
 
 if [ $EDIT_FLAG -ne 1 ]; then
    echo "==== Update repodata ====="
    mkdir -p $SRPM_OUT/repodata
-   for d in `find -L $SRPM_OUT -type d -name repodata`; do
+   for d in $(find -L $SRPM_OUT -type d -name repodata); do
       (cd $d/..
-       rm -rf repodata
-       $CREATEREPO `pwd`
+       \rm -rf repodata
+       $CREATEREPO $(pwd)
       )
    done
    echo "==== Update repodata complete ====="
@@ -1233,13 +1239,13 @@ FINAL_RC=0
 if [ $CLEAN_FLAG -eq 0 ] && [ $EDIT_FLAG -eq 0 ]; then
     echo ""
     if [ "$SRPM_FAILED_REBUILD_LIST" != "" ]; then
-       N=`echo "$SRPM_FAILED_REBUILD_LIST" | wc -w`
+       N=$(echo "$SRPM_FAILED_REBUILD_LIST" | wc -w)
        echo "Failed to build $N packages:"
        echo "   $SRPM_FAILED_REBUILD_LIST"
        FINAL_RC=1
     fi
     if [ "$SRPM_REBUILT_LIST" != "" ]; then
-       N=`echo "$SRPM_REBUILT_LIST" | wc -w`
+       N=$(echo "$SRPM_REBUILT_LIST" | wc -w)
        echo "Successfully built $N packages:"
        echo "   $SRPM_REBUILT_LIST"
        echo ""

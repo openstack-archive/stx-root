@@ -43,7 +43,7 @@ RT_BUILD=1
 INSTALLER_BUILD=0
 
 # read the options
-TEMP=`getopt -o h --long serial,rt,std,edit,no-meta-patch,no-descendants,no-required,no-build-info,no-autoclean,formal,careful,help,clean -n 'build-pkgs' -- "$@"`
+TEMP=$(getopt -o h --long serial,rt,std,edit,no-meta-patch,no-descendants,no-required,no-build-info,no-autoclean,formal,careful,help,clean -n 'build-pkgs' -- "$@")
 if [ $? -ne 0 ]; then
     usage
     exit 1
