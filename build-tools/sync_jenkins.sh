@@ -72,17 +72,17 @@ while true ; do
 done
 
 if [ "x$JENKINSURL" == "x" ]; then
-	JENKINSURL=$@
+    JENKINSURL=$@
 fi
 
 if [ $HELP -eq 1 ]; then
-	usage
-	exit 0
+    usage
+    exit 0
 fi
 
 if [ "x$JENKINSURL" == "x" ]; then
-	usage
-	exit 1
+    usage
+    exit 1
 fi
 
 mkdir -p $MY_WORKSPACE/export $MY_WORKSPACE/std/rpmbuild/RPMS $MY_WORKSPACE/std/rpmbuild/SRPMS $MY_WORKSPACE/rt/rpmbuild/RPMS $MY_WORKSPACE/rt/rpmbuild/SRPMS
@@ -98,13 +98,13 @@ pushd $MY_REPO > /dev/null
 find . -type d -name ".git" | sed "s%/\.git$%%" > $TMPFILE
 
 while read hashfile; do
-	gitdir=`echo $hashfile | cut -d " " -f 1`
-	gitcommit=`echo $hashfile | sed s/.*[[:space:]]//g`
-	echo "doing dir $gitdir commit $gitcommit"
-	
-	pushd $gitdir >/dev/null
-	git checkout $gitcommit
-	popd
+    gitdir=`echo $hashfile | cut -d " " -f 1`
+    gitcommit=`echo $hashfile | sed s/.*[[:space:]]//g`
+    echo "doing dir $gitdir commit $gitcommit"
+
+    pushd $gitdir >/dev/null
+    git checkout $gitcommit
+    popd
 done < $MY_WORKSPACE/$GITHASHFILE
 
 popd
@@ -113,32 +113,32 @@ pushd $MY_WORKSPACE
 
 # clean stuff
 for build_type in std rt; do
-   rm -rf $MY_WORKSPACE/$build_type/rpmbuild/SRPMS
-   rm -rf $MY_WORKSPACE/$build_type/rpmbuild/RPMS
-   rm -rf $MY_WORKSPACE/$build_type/rpmbuild/inputs
-   rm -rf $MY_WORKSPACE/$build_type/rpmbuild/srpm_assemble
+    rm -rf $MY_WORKSPACE/$build_type/rpmbuild/SRPMS
+    rm -rf $MY_WORKSPACE/$build_type/rpmbuild/RPMS
+    rm -rf $MY_WORKSPACE/$build_type/rpmbuild/inputs
+    rm -rf $MY_WORKSPACE/$build_type/rpmbuild/srpm_assemble
 done
 
 # copy source rpms from jenkins
 for build_type in std rt; do
-   mkdir -p $MY_WORKSPACE/$build_type/rpmbuild/RPMS
-   mkdir -p $MY_WORKSPACE/$build_type/rpmbuild/SRPMS
-   rsync -r ${JENKINSURL}/$build_type/inputs $build_type/
-   sleep 1
-   rsync -r ${JENKINSURL}/$build_type/srpm_assemble $build_type/
-   sleep 1
-   rsync -r ${JENKINSURL}/$build_type/rpmbuild/SRPMS/* $MY_WORKSPACE/$build_type/rpmbuild/SRPMS
-   sleep 1
-   for sub_repo in cgcs-centos-repo cgcs-tis-repo cgcs-3rd-party-repo; do
-      rsync ${JENKINSURL}/$build_type/$sub_repo.last_head $MY_WORKSPACE/$build_type
-      if [ "$build_type" == "std" ]; then
-         cp $MY_WORKSPACE/$build_type/$sub_repo.last_head $MY_REPO/$sub_repo/.last_head
-      fi
-   done
-   sleep 1
-   rsync -r ${JENKINSURL}/$build_type/results $build_type/
-   sleep 1
-   rsync -r ${JENKINSURL}/$build_type/rpmbuild/RPMS/* $MY_WORKSPACE/$build_type/rpmbuild/RPMS
+    mkdir -p $MY_WORKSPACE/$build_type/rpmbuild/RPMS
+    mkdir -p $MY_WORKSPACE/$build_type/rpmbuild/SRPMS
+    rsync -r ${JENKINSURL}/$build_type/inputs $build_type/
+    sleep 1
+    rsync -r ${JENKINSURL}/$build_type/srpm_assemble $build_type/
+    sleep 1
+    rsync -r ${JENKINSURL}/$build_type/rpmbuild/SRPMS/* $MY_WORKSPACE/$build_type/rpmbuild/SRPMS
+    sleep 1
+    for sub_repo in cgcs-centos-repo cgcs-tis-repo cgcs-3rd-party-repo; do
+        rsync ${JENKINSURL}/$build_type/$sub_repo.last_head $MY_WORKSPACE/$build_type
+        if [ "$build_type" == "std" ]; then
+            cp $MY_WORKSPACE/$build_type/$sub_repo.last_head $MY_REPO/$sub_repo/.last_head
+        fi
+    done
+    sleep 1
+    rsync -r ${JENKINSURL}/$build_type/results $build_type/
+    sleep 1
+    rsync -r ${JENKINSURL}/$build_type/rpmbuild/RPMS/* $MY_WORKSPACE/$build_type/rpmbuild/RPMS
 done
 
 popd
