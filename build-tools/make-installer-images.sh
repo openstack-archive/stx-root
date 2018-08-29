@@ -2,25 +2,25 @@
 ## this script is called by "update-pxe-network-installer" and run in "sudo"
 ## created by Yong Hu (yong.hu@intel.com), 05/24/2018
 
-function clean_rootfs() {
+function clean_rootfs {
     rootfs_dir=$1
-   echo "--> remove old files in original rootfs"
+    echo "--> remove old files in original rootfs"
     conf="$(ls ${rootfs_dir}/etc/ld.so.conf.d/kernel-*.conf)"
     echo "conf basename = $(basename $conf)"
     old_version="tbd"
-    if [ -f $conf ];then
+    if [ -f $conf ]; then
         old_version="$(echo $(basename $conf) | rev | cut -d'.' -f2- | rev | cut -d'-' -f2-)"
     fi
     echo "old version is $old_version"
     # remove old files in original initrd.img
     # do this in chroot to avoid accidentialy wrong operations on host root
 chroot $rootfs_dir /bin/bash -x <<EOF
-        rm -rf ./boot/ ./etc/modules-load.d/ 
-        if [ -n $old_version ] &&  [ -f ./etc/ld.so.conf.d/kernel-${old_version}.conf ]; then
-            rm -rf ./etc/ld.so.conf.d/kernel-${old_version}.conf 
-            rm -rf ./lib/modules/${old_version}
-        fi
-	if [ -d ./usr/lib64/python2.7/site-packages/pyanaconda/ ];then 
+    rm -rf ./boot/ ./etc/modules-load.d/
+    if [ -n $old_version ] &&  [ -f ./etc/ld.so.conf.d/kernel-${old_version}.conf ]; then
+        rm -rf ./etc/ld.so.conf.d/kernel-${old_version}.conf
+        rm -rf ./lib/modules/${old_version}
+    fi
+    if [ -d ./usr/lib64/python2.7/site-packages/pyanaconda/ ];then
             rm -rf usr/lib64/python2.7/site-packages/pyanaconda/
         fi
         if [ -d ./usr/lib64/python2.7/site-packages/rpm/ ];then
@@ -51,7 +51,9 @@ fi
 work_dir=$1
 mode=$2
 output_dir=$work_dir/output
-if [ ! -d $output_dir ];then mkdir -p $output_dir; fi
+if [ ! -d $output_dir ]; then
+    mkdir -p $output_dir;
+fi
 
 if [ "$mode" != "std" ] && [ "$mode" != "rt" ]; then
     echo "ERROR: wrong kernel mode, must be std or rt"
@@ -99,12 +101,12 @@ if [ -f $new_kernel ];then
     #copy out the new kernel
     if [ $mode == "std" ];then
         if [ -f $output_dir/new-vmlinuz ]; then
-             mv -f $output_dir/new-vmlinuz $output_dir/vmlinuz-bakcup-$timestamp
+            mv -f $output_dir/new-vmlinuz $output_dir/vmlinuz-bakcup-$timestamp
         fi
         cp -f $new_kernel $output_dir/new-vmlinuz
     else
         if [ -f $output_dir/new-vmlinuz-rt ]; then
-             mv -f $output_dir/new-vmlinuz-rt $output_dir/vmlinuz-rt-bakcup-$timestamp
+            mv -f $output_dir/new-vmlinuz-rt $output_dir/vmlinuz-rt-bakcup-$timestamp
         fi
         cp -f $new_kernel $output_dir/new-vmlinuz-rt
     fi
@@ -165,7 +167,7 @@ if [ ! -d $rootfs_rpms_dir ];then
 fi
 
 # make squashfs.mnt and ready and umounted
-if [ ! -d $work_dir/squashfs.mnt ];then 
+if [ ! -d $work_dir/squashfs.mnt ];then
     mkdir -p $work_dir/squashfs.mnt
 else
     # in case it was mounted previously
@@ -191,7 +193,9 @@ fi
 echo $ORIG_SQUASHFS
 mount -o loop -t squashfs $ORIG_SQUASHFS $work_dir/squashfs.mnt
 
-if [ ! -d ./LiveOS ];then mkdir -p ./LiveOS ; fi
+if [ ! -d ./LiveOS ]; then
+    mkdir -p ./LiveOS
+fi
 
 echo "--> copy rootfs.img from original squashfs.img to LiveOS folder"
 cp -f ./squashfs.mnt/LiveOS/rootfs.img ./LiveOS/.
@@ -230,7 +234,7 @@ umount $squashfs_root
 #rename the old version
 if [ -f $output_dir/new-squashfs.img ]; then
     mv -f $output_dir/new-squashfs.img $output_dir/squashfs.img-backup-$timestamp
-fi 
+fi
 
 echo "--> make the new squashfs image"
 mksquashfs LiveOS $output_dir/new-squashfs.img -keep-as-directory -comp xz -b 1M

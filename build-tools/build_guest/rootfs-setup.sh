@@ -2,10 +2,10 @@
 
 BUILD_MODE=''
 if [ "$1" == "--rt" ]; then
-   BUILD_MODE="rt"
+    BUILD_MODE="rt"
 fi
 if [ "$1" == "--std" ]; then
-   BUILD_MODE="std"
+    BUILD_MODE="std"
 fi
 
 # Setup boot directory for syslinux configuration (/boot/extlinux.conf)
@@ -53,11 +53,11 @@ echo "touch /var/run/.init-complete" >> /etc/rc.local
 
 if [ "$BUILD_MODE" == "rt" ]; then
    # Adjust system tuning knobs during init when using rt kernel (CGTS-7047)
-   echo "echo 1 > /sys/devices/virtual/workqueue/cpumask" >> /etc/rc.local
-   echo "echo 1 > /sys/bus/workqueue/devices/writeback/cpumask" >> /etc/rc.local
-   echo "echo -1 > /proc/sys/kernel/sched_rt_runtime_us" >> /etc/rc.local
-   echo "echo 0 > /proc/sys/kernel/timer_migration" >> /etc/rc.local
-   echo "echo 10 > /proc/sys/vm/stat_interval" >> /etc/rc.local
+    echo "echo 1 > /sys/devices/virtual/workqueue/cpumask" >> /etc/rc.local
+    echo "echo 1 > /sys/bus/workqueue/devices/writeback/cpumask" >> /etc/rc.local
+    echo "echo -1 > /proc/sys/kernel/sched_rt_runtime_us" >> /etc/rc.local
+    echo "echo 0 > /proc/sys/kernel/timer_migration" >> /etc/rc.local
+    echo "echo 10 > /proc/sys/vm/stat_interval" >> /etc/rc.local
 fi
 
 # Disable audit service by default
@@ -68,8 +68,8 @@ systemctl disable auditd
 
 if [ "$BUILD_MODE" == "rt" ]; then
    # Additional services to disable on rt guest (CGTS-7047)
-   systemctl disable polkit.service
-   systemctl disable tuned.service
+    systemctl disable polkit.service
+    systemctl disable tuned.service
 fi
 
 # Clean the yum cache.  We don't want to maintain it on the guest file system.
@@ -80,9 +80,9 @@ sed -i 's#OmitLocalLogging on#OmitLocalLogging off#g' /etc/rsyslog.conf
 
 # select correct kernel and initrd
 if [ "$BUILD_MODE" == "rt" ]; then
-   PATTERN=$(rpm -q --qf '%{VERSION}-%{RELEASE}' kernel-rt)
+    PATTERN=$(rpm -q --qf '%{VERSION}-%{RELEASE}' kernel-rt)
 else
-   PATTERN=$(rpm -q --qf '%{VERSION}-%{RELEASE}' kernel)
+    PATTERN=$(rpm -q --qf '%{VERSION}-%{RELEASE}' kernel)
 fi
 cd /boot
 rm -f vmlinuz initramfs.img

@@ -12,18 +12,18 @@ SUBGITS=`find . -type d -name ".git" | sed "s%/\.git$%%"`
 
 # Go through all subgits and create the tag if it does not already exist
 for subgit in $SUBGITS; do
-   echo ""
-   echo ""
-   pushd $subgit > /dev/null
+    echo ""
+    echo ""
+    pushd $subgit > /dev/null
 
-   echo "Creating tag $tag"
-   git push origin $tag
-   if [ $? != 0 ] ; then
-      echo "ERROR: Could not exec: git push origin $tag"
-      popd > /dev/null
-      exit 1
-   fi
-  
-   popd > /dev/null
+    echo "Creating tag $tag"
+    git push origin $tag
+    if [ $? != 0 ] ; then
+        echo "ERROR: Could not exec: git push origin $tag"
+        popd > /dev/null
+        exit 1
+    fi
+
+    popd > /dev/null
 done
 
