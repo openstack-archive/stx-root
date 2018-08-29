@@ -20,6 +20,7 @@ usage () {
 }
 
 SERIAL_FLAG=0
+RC=0
 
 for arg in "$@"; do
     case "$1" in
@@ -44,8 +45,11 @@ fi
 if [ $SERIAL_FLAG -eq 1 ]; then
     echo "build-pkgs-serial $@"
     build-pkgs-serial "$@"
+    RC=$?
 else
     echo "build-pkgs-parallel $@"
     build-pkgs-parallel "$@"
+    RC=$?
 fi
 
+exit $RC

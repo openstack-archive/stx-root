@@ -651,7 +651,7 @@ def schedule2(build_idx, pkg_names, unbuilt_pkg_names, building_pkg_names, opts)
             # log(opts.logfile, "schedule2: building deps for pkg=%s, depth=%d: %s" % (name, depth, building_deps[depth][name]))
             if len(unbuilt_deps[depth][name]) == 0 and len(building_deps[depth][name]) == 0:
                 if can_build_at_idx(build_idx, name, opts):
-                    log(opts.logfile, "schedule2: no unbuilt deps for '%s'" % name)
+                    log(opts.logfile, "schedule2: no unbuilt deps for '%s', searching at depth %d" % (name, depth))
                     return name
                 else:
                     # log(opts.logfile, "schedule2: Can't build '%s' on 'b%d'" % (name, build_idx))
@@ -666,7 +666,7 @@ def schedule2(build_idx, pkg_names, unbuilt_pkg_names, building_pkg_names, opts)
             if (len(building_deps[depth][name]) == 0 and len(unbuilt_deps[depth][name]) == 1 and unbuilt_deps[depth][name][0] in no_dep_list) or (len(unbuilt_deps[depth][name]) == 0 and len(building_deps[depth][name]) == 1 and building_deps[depth][name][0] in no_dep_list):
                 if len(unbuilt_deps[0][name]) == 0 and len(building_deps[0][name]) == 0:
                     if can_build_at_idx(build_idx, name, opts):
-                        log(opts.logfile, "schedule2: no unbuilt deps for '%s' except for indirect kernel dep" % name)
+                        log(opts.logfile, "schedule2: no unbuilt deps for '%s' except for indirect kernel dep, searching at depth %d" % (name, depth))
                         return name
                     else:
                         # log(opts.logfile, "schedule2: Can't build '%s' on 'b%d'" % (name, build_idx))
@@ -690,7 +690,7 @@ def schedule2(build_idx, pkg_names, unbuilt_pkg_names, building_pkg_names, opts)
                 # log(opts.logfile, "schedule2: deps: building deps for %s -> %s, depth=%d: %s" % (name, dep_name, depth, building_deps[depth][dep_name]))
                 if len(unbuilt_deps[depth][dep_name]) == 0 and len(building_deps[depth][dep_name]) == 0:
                     if can_build_at_idx(build_idx, dep_name, opts):
-                        log(opts.logfile, "schedule2: deps: no unbuilt deps for '%s', working towards '%s'" % (dep_name, name))
+                        log(opts.logfile, "schedule2: deps: no unbuilt deps for '%s', working towards '%s', searching at depth %d" % (dep_name, name, depth))
                         return dep_name
 
                 if not dep_name in unbuilt_deps[0]:
@@ -702,7 +702,7 @@ def schedule2(build_idx, pkg_names, unbuilt_pkg_names, building_pkg_names, opts)
                 if (len(building_deps[depth][dep_name]) == 0 and len(unbuilt_deps[depth][dep_name]) == 1 and unbuilt_deps[depth][dep_name][0] in no_dep_list) or (len(unbuilt_deps[depth][dep_name]) == 0 and len(building_deps[depth][dep_name]) == 1 and building_deps[depth][dep_name][0] in no_dep_list):
                     if len(unbuilt_deps[0][dep_name]) == 0 and len(building_deps[0][dep_name]) == 0:
                         if can_build_at_idx(build_idx, dep_name, opts):
-                            log(opts.logfile, "schedule2: no unbuilt deps for '%s' except for indirect kernel dep, working towards '%s'" % (dep_name, name))
+                            log(opts.logfile, "schedule2: no unbuilt deps for '%s' except for indirect kernel dep, working towards '%s', searching at depth %d" % (dep_name, name, depth))
                             return dep_name
 
                 if name in unbuilt_deps[0][dep_name]:

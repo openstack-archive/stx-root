@@ -53,15 +53,3 @@ classify () {
       echo "unknown"
    fi
 }
-
-# for g in $(find $MY_REPO -type d -name .git); do
-#     d=$(dirname $g)
-#     c="$d/centos_pkg_dirs"
-#     if [ -f $c ]; then
-#        for d2 in $(cat $c); do
-#           pkg_dir="$d/$d2"
-#           echo "$(classify $pkg_dir): $pkg_dir"
-#        done
-#     fi
-# done
-

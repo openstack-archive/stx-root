@@ -2,7 +2,10 @@
 
 # This program is a wrapper around build-srpms-parallel and build-rpms-parallel
 
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+BUILD_PKGS_PARALLEL_DIR="$(dirname "$(readlink -f "${BASH_SOURCE[0]}" )" )"
+
+source "${BUILD_PKGS_PARALLEL_DIR}/spec-utils"
+
 
 usage () {
     echo ""
@@ -40,7 +43,7 @@ RT_BUILD=1
 INSTALLER_BUILD=0
 
 # read the options
-TEMP=$(getopt -o h --long rt,std,installer,edit,no-meta-patch,no-descendants,no-required,no-build-info,no-autoclean,formal,careful,help,clean -n 'build-pkgs-parallel' -- "$@")
+TEMP=$(getopt -o h --long parallel,rt,std,installer,edit,no-meta-patch,no-descendants,no-required,no-build-info,no-autoclean,formal,careful,help,clean -n 'build-pkgs-parallel' -- "$@")
 if [ $? -ne 0 ]; then
     usage
     exit 0
@@ -66,6 +69,7 @@ while true ; do
         --rt)             STD_BUILD=0 ; shift ;;
         --std)            RT_BUILD=0 ; shift ;;
         --installer)      INSTALLER_BUILD=1 ; STD_BUILD=0 ; RT_BUILD=0 ; shift ;;
+        --parallel)       shift ;;
         --)               shift ; break ;;
         *)                usage; exit 1 ;;
     esac
@@ -203,16 +207,18 @@ echo "CLEAN_FLAG=$CLEAN_FLAG"
 echo "EDIT_FLAG=$EDIT_FLAG"
 
 if [ "x$TARGETS" != "x  " ]; then
-   source $MY_REPO/build-tools/spec-utils
    TARGETS_STD="$(find_targets centos_pkg_dirs)"
 
    BUILD_TYPE_SAVE="$BUILD_TYPE"
    BUILD_TYPE="rt"
    TARGETS_RT="$(find_targets centos_pkg_dirs_rt)"
+   BUILD_TYPE="installer"
+   TARGETS_INSTALLER="$(find_targets centos_pkg_dirs_installer)"
    BUILD_TYPE="$BUILD_TYPE_SAVE"
 
    echo "TARGETS_STD=$TARGETS_STD"
    echo "TARGETS_RT=$TARGETS_RT"
+   echo "TARGETS_INSTALLER=$TARGETS_INSTALLER"
 
    for x in $TARGETS; do
        if [[ $TARGETS_STD == *" $x "* ]]
@@ -223,7 +229,13 @@ if [ "x$TARGETS" != "x  " ]; then
            then
                echo "found $x" >> /dev/null;
            else
-               TARGETS_MISC+="$x "
+               if [[ $TARGETS_INSTALLER == *" $x "* ]]
+               then
+                   echo "found $x" >> /dev/null;
+                   INSTALLER_BUILD=1
+               else
+                   TARGETS_MISC+="$x "
+               fi
            fi
        fi
    done
@@ -243,25 +255,43 @@ if [ $CLEAN_FLAG -eq 1 ]; then
          if [ $EDIT_FLAG -ne 1 ]; then
             echo "$DIR/build-rpms-parallel --std --clean $EXTRA_ARGS_COMMON $EXTRA_ARGS_RPM $TARGETS_STD $TARGETS_MISC"
             $DIR/build-rpms-parallel --std --clean $EXTRA_ARGS_COMMON $EXTRA_ARGS_RPM $TARGETS_STD $TARGETS_MISC || exit 1
+            echo "${BUILD_PKGS_PARALLEL_DIR}/build-rpms-parallel --std --clean $EXTRA_ARGS_COMMON $EXTRA_ARGS_RPM $TARGETS_STD $TARGETS_MISC"
+            ${BUILD_PKGS_PARALLEL_DIR}/build-rpms-parallel --std --clean $EXTRA_ARGS_COMMON $EXTRA_ARGS_RPM $TARGETS_STD $TARGETS_MISC || exit 1
+
          fi
       fi
       if [ "x$TARGETS" == "x  " ] || [ "$TARGETS_STD" != " " ] || [ "$TARGETS_MISC" != " " ]; then
-         echo "$DIR/build-srpms-parallel --std --clean $EXTRA_ARGS_COMMON $EXTRA_ARGS_SRPM $TARGETS_STD $TARGETS_MISC"
-         $DIR/build-srpms-parallel --std --clean $EXTRA_ARGS_COMMON $EXTRA_ARGS_SRPM $TARGETS_STD $TARGETS_MISC || exit 1
+         echo "${BUILD_PKGS_PARALLEL_DIR}/build-srpms-parallel --std --clean $EXTRA_ARGS_COMMON $EXTRA_ARGS_SRPM $TARGETS_STD $TARGETS_MISC"
+         ${BUILD_PKGS_PARALLEL_DIR}/build-srpms-parallel --std --clean $EXTRA_ARGS_COMMON $EXTRA_ARGS_SRPM $TARGETS_STD $TARGETS_MISC || exit 1
       fi
    fi
+
    if [ $RT_BUILD -eq 1 ]; then
       if [ "x$TARGETS" == "x  " ] || [ "$TARGETS_RT" != " " ] || [ "$TARGETS_MISC" != " " ]; then
          if [ $EDIT_FLAG -ne 1 ]; then
-            echo "$DIR/build-rpms-parallel --rt --clean $EXTRA_ARGS_COMMON $EXTRA_ARGS_RPM $TARGETS_RT $TARGETS_MISC"
-            $DIR/build-rpms-parallel --rt --clean $EXTRA_ARGS_COMMON $EXTRA_ARGS_RPM $TARGETS_RT $TARGETS_MISC || exit 1
+            echo "${BUILD_PKGS_PARALLEL_DIR}/build-rpms-parallel --rt --clean $EXTRA_ARGS_COMMON $EXTRA_ARGS_RPM $TARGETS_RT $TARGETS_MISC"
+            ${BUILD_PKGS_PARALLEL_DIR}/build-rpms-parallel --rt --clean $EXTRA_ARGS_COMMON $EXTRA_ARGS_RPM $TARGETS_RT $TARGETS_MISC || exit 1
          fi
       fi
       if [ "x$TARGETS" == "x  " ] || [ "$TARGETS_RT" != " " ] || [ "$TARGETS_MISC" != " " ]; then
-         echo "$DIR/build-srpms-parallel --rt --clean $EXTRA_ARGS_COMMON $EXTRA_ARGS_SRPM $TARGETS_RT $TARGETS_MISC"
-         $DIR/build-srpms-parallel --rt --clean $EXTRA_ARGS_COMMON $EXTRA_ARGS_SRPM $TARGETS_RT $TARGETS_MISC || exit 1
+         echo "${BUILD_PKGS_PARALLEL_DIR}/build-srpms-parallel --rt --clean $EXTRA_ARGS_COMMON $EXTRA_ARGS_SRPM $TARGETS_RT $TARGETS_MISC"
+         ${BUILD_PKGS_PARALLEL_DIR}/build-srpms-parallel --rt --clean $EXTRA_ARGS_COMMON $EXTRA_ARGS_SRPM $TARGETS_RT $TARGETS_MISC || exit 1
       fi
    fi
+
+   if [ $INSTALLER_BUILD -eq 1 ]; then
+      if [ "x$TARGETS" == "x" ] || [ "$TARGETS_INSTALLER" != " " ]; then
+         if [ $EDIT_FLAG -ne 1 ]; then
+            echo "${BUILD_PKGS_PARALLEL_DIR}/build-rpms-serial --installer --clean $EXTRA_ARGS_COMMON $EXTRA_ARGS_RPM $TARGETS_INSTALLER"
+            ${BUILD_PKGS_PARALLEL_DIR}/build-rpms-serial --installer --clean $EXTRA_ARGS_COMMON $EXTRA_ARGS_RPM $TARGETS_INSTALLER || exit 1
+         fi
+      fi
+      if [ "x$TARGETS" == "x  " ] || [ "$TARGETS_INSTALLER" != " " ]; then
+         echo "${BUILD_PKGS_PARALLEL_DIR}/build-srpms-serial --installer --clean $EXTRA_ARGS_COMMON $EXTRA_ARGS_SRPM $TARGETS_INSTALLER"
+         ${BUILD_PKGS_PARALLEL_DIR}/build-srpms-serial --installer --clean $EXTRA_ARGS_COMMON $EXTRA_ARGS_SRPM $TARGETS_INSTALLER || exit 1
+      fi
+   fi
+
    exit $?
 fi
 
@@ -293,8 +323,9 @@ function launch_build()
 
    echo -e "\n######## $(date): Launching build-srpms-parallel --$build_type $EXTRA_ARGS $@\n" | tee --append $logfile
    # No clean flag, call build-srpms-parallel followed by build-rpms-parallel
-   echo "$DIR/build-srpms-parallel --$build_type $EXTRA_ARGS_COMMON $EXTRA_ARGS_SRPM $targets" | tee --append $logfile
-   $DIR/build-srpms-parallel --$build_type $EXTRA_ARGS_COMMON $EXTRA_ARGS_SRPM $targets 2>&1 | tee --append $logfile
+   echo "${BUILD_PKGS_PARALLEL_DIR}/build-srpms-parallel --$build_type $EXTRA_ARGS_COMMON $EXTRA_ARGS_SRPM $targets" | tee --append $logfile
+   ${BUILD_PKGS_PARALLEL_DIR}/build-srpms-parallel --$build_type $EXTRA_ARGS_COMMON $EXTRA_ARGS_SRPM $targets 2>&1 | tee --append $logfile
+
    rc=${PIPESTATUS[0]}
    if [ $rc -eq 0 ]; then
       echo -e "\n######## $(date): build-srpm-parallel --$build_type was successful" | tee --append $logfile
@@ -306,8 +337,8 @@ function launch_build()
 
    if [ $EDIT_FLAG -ne 1 ]; then
       echo -e "\n######## $(date): Launching build-rpms-parallel --$build_type $EXTRA_ARGS $@\n" | tee --append $logfile
-      echo "$DIR/build-rpms-parallel --$build_type $EXTRA_ARGS_COMMON $EXTRA_ARGS_RPM $targets" | tee --append $logfile
-      $DIR/build-rpms-parallel --$build_type $EXTRA_ARGS_COMMON $EXTRA_ARGS_RPM $targets 2>&1 | tee --append $logfile
+      echo "${BUILD_PKGS_PARALLEL_DIR}/build-rpms-parallel --$build_type $EXTRA_ARGS_COMMON $EXTRA_ARGS_RPM $targets" | tee --append $logfile
+      ${BUILD_PKGS_PARALLEL_DIR}/build-rpms-parallel --$build_type $EXTRA_ARGS_COMMON $EXTRA_ARGS_RPM $targets 2>&1 | tee --append $logfile
       rc=${PIPESTATUS[0]}
       if [ $rc -eq 0 ]; then
          echo -e "\n######## $(date): build-rpm-parallel --$build_type was successful" | tee --append $logfile
@@ -344,6 +375,7 @@ if [ $STD_BUILD -eq 1 ]; then
 else
    echo "Skipping 'std' build"
 fi
+
 if [ $RT_BUILD -eq 1 ]; then
    if [ "x$TARGETS" == "x  " ] || [ "$TARGETS_RT" != " " ] || [ "$TARGETS_MISC" != " " ]; then
       launch_build rt
@@ -353,6 +385,7 @@ if [ $RT_BUILD -eq 1 ]; then
 else
    echo "Skipping 'rt' build"
 fi
+
 if [ $INSTALLER_BUILD -eq 1 ]; then
    if [ "x$TARGETS" == "x  " ] || [ "$TARGETS_INSTALLER" != " " ] || [ "$TARGETS_MISC" != " " ]; then
       launch_build installer

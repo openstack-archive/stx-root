@@ -2,7 +2,10 @@
 
 # This program is a wrapper around build-srpms and build-rpms
 
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+BUILD_PKGS_SERIAL_DIR="$(dirname "$(readlink -f "${BASH_SOURCE[0]}" )" )"
+
+source "${BUILD_PKGS_SERIAL_DIR}/spec-utils"
+
 
 usage () {
     echo ""
@@ -12,22 +15,22 @@ usage () {
     echo "   --no-autoclean) are not recommended for the first build after a clone/pull,"
     echo "   nor the final build prior to creating an iso or patch, but can be used"
     echo "   for intermediate builds.  i.e. while debugging compilation failures." 
-    echo "      build-pkgs [--no-descendants] [--no-required] [--no-build-info] [--no-autoclean] [--careful] [--formal] [ list of package names ]"
+    echo "      build-pkgs-serial [--no-descendants] [--no-required] [--no-build-info] [--no-autoclean] [--careful] [--formal] [ list of package names ]"
     echo ""
     echo "   Delete source rpms, and the directories associated with it's creation:"
     echo "   Note: does not clean an edit environment"
-    echo "      build-pkgs --clean [ list of package names ]"
+    echo "      build-pkgs-serial --clean [ list of package names ]"
     echo ""
     echo "   Extract an src.rpm into a pair of git trees to aid in editing it's contents,"
     echo "   one for source code and one for metadata such as the spec file."
     echo "   If --no-meta-patch is specified, then WRS patches are omitted."
-    echo "      build-pkgs --edit [--no-meta-patch] [ list of package names ]"
+    echo "      build-pkgs-serial --edit [--no-meta-patch] [ list of package names ]"
     echo ""
     echo "   Delete an edit environment"
-    echo "      build-pkgs --edit --clean [ list of package names ]"
+    echo "      build-pkgs-serial --edit --clean [ list of package names ]"
     echo ""
     echo "   This help page"
-    echo "      build-pkgs [--help]"
+    echo "      build-pkgs-serial [--help]"
     echo ""
 }
 
@@ -43,7 +46,7 @@ INSTALLER_BUILD=0
 TEMP=`getopt -o h --long serial,rt,std,edit,no-meta-patch,no-descendants,no-required,no-build-info,no-autoclean,formal,careful,help,clean -n 'build-pkgs' -- "$@"`
 if [ $? -ne 0 ]; then
     usage
-    exit 0
+    exit 1
 fi
 eval set -- "$TEMP"
 
@@ -160,7 +163,6 @@ echo "CLEAN_FLAG=$CLEAN_FLAG"
 echo "EDIT_FLAG=$EDIT_FLAG"
 
 if [ "x$TARGETS" != "x  " ]; then
-   source $MY_REPO/build-tools/spec-utils
    TARGETS_STD="$(find_targets centos_pkg_dirs)"
 
    BUILD_TYPE_SAVE="$BUILD_TYPE"
@@ -208,37 +210,40 @@ if [ $CLEAN_FLAG -eq 1 ]; then
    if [ $STD_BUILD -eq 1 ]; then
       if [ "x$TARGETS" == "x  " ] || [ "$TARGETS_STD" != " " ] || [ "$TARGETS_MISC" != " " ]; then
          if [ $EDIT_FLAG -ne 1 ]; then
-            echo "$DIR/build-rpms-serial --std --clean $EXTRA_ARGS_COMMON $EXTRA_ARGS_RPM $TARGETS_STD $TARGETS_MISC"
-            $DIR/build-rpms-serial --std --clean $EXTRA_ARGS_COMMON $EXTRA_ARGS_RPM $TARGETS_STD $TARGETS_MISC || exit 1
+            echo "${BUILD_PKGS_SERIAL_DIR}/build-rpms-serial --std --clean $EXTRA_ARGS_COMMON $EXTRA_ARGS_RPM $TARGETS_STD $TARGETS_MISC"
+            ${BUILD_PKGS_SERIAL_DIR}/build-rpms-serial --std --clean $EXTRA_ARGS_COMMON $EXTRA_ARGS_RPM $TARGETS_STD $TARGETS_MISC || exit 1
+
          fi
       fi
       if [ "x$TARGETS" == "x  " ] || [ "$TARGETS_STD" != " " ] || [ "$TARGETS_MISC" != " " ]; then
-         echo "$DIR/build-srpms-serial --std --clean $EXTRA_ARGS_COMMON $EXTRA_ARGS_SRPM $TARGETS_STD $TARGETS_MISC"
-         $DIR/build-srpms-serial --std --clean $EXTRA_ARGS_COMMON $EXTRA_ARGS_SRPM $TARGETS_STD $TARGETS_MISC || exit 1
+         echo "${BUILD_PKGS_SERIAL_DIR}/build-srpms-serial --std --clean $EXTRA_ARGS_COMMON $EXTRA_ARGS_SRPM $TARGETS_STD $TARGETS_MISC"
+         ${BUILD_PKGS_SERIAL_DIR}/build-srpms-serial --std --clean $EXTRA_ARGS_COMMON $EXTRA_ARGS_SRPM $TARGETS_STD $TARGETS_MISC || exit 1
       fi
    fi
+
    if [ $RT_BUILD -eq 1 ]; then
       if [ "x$TARGETS" == "x" ] || [ "$TARGETS_RT" != " " ] || [ "$TARGETS_MISC" != " " ]; then
          if [ $EDIT_FLAG -ne 1 ]; then
-            echo "$DIR/build-rpms-serial --rt --clean $EXTRA_ARGS_COMMON $EXTRA_ARGS_RPM $TARGETS_RT $TARGETS_MISC"
-            $DIR/build-rpms-serial --rt --clean $EXTRA_ARGS_COMMON $EXTRA_ARGS_RPM $TARGETS_RT $TARGETS_MISC || exit 1
+            echo "${BUILD_PKGS_SERIAL_DIR}/build-rpms-serial --rt --clean $EXTRA_ARGS_COMMON $EXTRA_ARGS_RPM $TARGETS_RT $TARGETS_MISC"
+            ${BUILD_PKGS_SERIAL_DIR}/build-rpms-serial --rt --clean $EXTRA_ARGS_COMMON $EXTRA_ARGS_RPM $TARGETS_RT $TARGETS_MISC || exit 1
          fi
       fi
       if [ "x$TARGETS" == "x  " ] || [ "$TARGETS_RT" != " " ] || [ "$TARGETS_MISC" != " " ]; then
-         echo "$DIR/build-srpms-serial --rt --clean $EXTRA_ARGS_COMMON $EXTRA_ARGS_SRPM $TARGETS_RT $TARGETS_MISC"
-         $DIR/build-srpms-serial --rt --clean $EXTRA_ARGS_COMMON $EXTRA_ARGS_SRPM $TARGETS_RT $TARGETS_MISC || exit 1
+         echo "${BUILD_PKGS_SERIAL_DIR}/build-srpms-serial --rt --clean $EXTRA_ARGS_COMMON $EXTRA_ARGS_SRPM $TARGETS_RT $TARGETS_MISC"
+         ${BUILD_PKGS_SERIAL_DIR}/build-srpms-serial --rt --clean $EXTRA_ARGS_COMMON $EXTRA_ARGS_SRPM $TARGETS_RT $TARGETS_MISC || exit 1
       fi
    fi
+
    if [ $INSTALLER_BUILD -eq 1 ]; then
       if [ "x$TARGETS" == "x" ] || [ "$TARGETS_INSTALLER" != " " ]; then
          if [ $EDIT_FLAG -ne 1 ]; then
-            echo "$DIR/build-rpms-serial --installer --clean $EXTRA_ARGS_COMMON $EXTRA_ARGS_RPM $TARGETS_INSTALLER"
-            $DIR/build-rpms-serial --installer --clean $EXTRA_ARGS_COMMON $EXTRA_ARGS_RPM $TARGETS_INSTALLER || exit 1
+            echo "${BUILD_PKGS_SERIAL_DIR}/build-rpms-serial --installer --clean $EXTRA_ARGS_COMMON $EXTRA_ARGS_RPM $TARGETS_INSTALLER"
+            ${BUILD_PKGS_SERIAL_DIR}/build-rpms-serial --installer --clean $EXTRA_ARGS_COMMON $EXTRA_ARGS_RPM $TARGETS_INSTALLER || exit 1
          fi
       fi
       if [ "x$TARGETS" == "x  " ] || [ "$TARGETS_INSTALLER" != " " ]; then
-         echo "$DIR/build-srpms-serial --installer --clean $EXTRA_ARGS_COMMON $EXTRA_ARGS_SRPM $TARGETS_INSTALLER"
-         $DIR/build-srpms-serial --installer --clean $EXTRA_ARGS_COMMON $EXTRA_ARGS_SRPM $TARGETS_INSTALLER || exit 1
+         echo "${BUILD_PKGS_SERIAL_DIR}/build-srpms-serial --installer --clean $EXTRA_ARGS_COMMON $EXTRA_ARGS_SRPM $TARGETS_INSTALLER"
+         ${BUILD_PKGS_SERIAL_DIR}/build-srpms-serial --installer --clean $EXTRA_ARGS_COMMON $EXTRA_ARGS_SRPM $TARGETS_INSTALLER || exit 1
       fi
    fi
    exit $?
@@ -260,7 +265,7 @@ function launch_build()
          targets="$TARGETS_RT $TARGETS_MISC"
       else
          if [ "$build_type" == "installer" ]; then
-            targets="$TARGETS_INSTALLER"
+            targets="$TARGETS_INSTALLER $TARGETS_MISC"
          else
             targets="$TARGETS"
          fi
@@ -271,8 +276,8 @@ function launch_build()
 
    echo -e "\n######## $(date): Launching build-srpms-serial --$build_type $EXTRA_ARGS $@\n" | tee --append $logfile
    # No clean flag, call build-srpms-serial followed by build-rpms-serial
-   echo "$DIR/build-srpms-serial --$build_type $EXTRA_ARGS_COMMON $EXTRA_ARGS_SRPM $targets" | tee --append $logfile
-   $DIR/build-srpms-serial --$build_type $EXTRA_ARGS_COMMON $EXTRA_ARGS_SRPM $targets 2>&1 | tee --append $logfile
+   echo "${BUILD_PKGS_SERIAL_DIR}/build-srpms-serial --$build_type $EXTRA_ARGS_COMMON $EXTRA_ARGS_SRPM $targets" | tee --append $logfile
+   ${BUILD_PKGS_SERIAL_DIR}/build-srpms-serial --$build_type $EXTRA_ARGS_COMMON $EXTRA_ARGS_SRPM $targets 2>&1 | tee --append $logfile
    rc=${PIPESTATUS[0]}
    if [ $rc -eq 0 ]; then
       echo -e "\n######## $(date): build-srpm-serial --$build_type was successful" | tee --append $logfile
@@ -284,8 +289,8 @@ function launch_build()
 
    if [ $EDIT_FLAG -ne 1 ]; then
       echo -e "\n######## $(date): Launching build-rpms-serial --$build_type $EXTRA_ARGS $@\n" | tee --append $logfile
-      echo "$DIR/build-rpms-serial --$build_type $EXTRA_ARGS_COMMON $EXTRA_ARGS_SRPM $targets" | tee --append $logfile
-      $DIR/build-rpms-serial --$build_type $EXTRA_ARGS_COMMON $EXTRA_ARGS_RPM $targets 2>&1 | tee --append $logfile
+      echo "${BUILD_PKGS_SERIAL_DIR}/build-rpms-serial --$build_type $EXTRA_ARGS_COMMON $EXTRA_ARGS_SRPM $targets" | tee --append $logfile
+      ${BUILD_PKGS_SERIAL_DIR}/build-rpms-serial --$build_type $EXTRA_ARGS_COMMON $EXTRA_ARGS_RPM $targets 2>&1 | tee --append $logfile
       rc=${PIPESTATUS[0]}
       if [ $rc -eq 0 ]; then
          echo -e "\n######## $(date): build-rpm-serial --$build_type was successful" | tee --append $logfile
@@ -322,6 +327,7 @@ if [ $STD_BUILD -eq 1 ]; then
 else
    echo "Skipping 'std' build"
 fi
+
 if [ $RT_BUILD -eq 1 ]; then
    if [ "x$TARGETS" == "x  " ] || [ "$TARGETS_RT" != " " ] || [ "$TARGETS_MISC" != " " ]; then
       launch_build rt
@@ -331,47 +337,16 @@ if [ $RT_BUILD -eq 1 ]; then
 else
    echo "Skipping 'rt' build"
 fi
+
 if [ $INSTALLER_BUILD -eq 1 ]; then
-   if [ "x$TARGETS" == "x  " ] || [ "$TARGETS_INSTALLER" != " " ]; then
+   if [ "x$TARGETS" == "x  " ] || [ "$TARGETS_INSTALLER" != " " ] || [ "$TARGETS_MISC" != " " ]; then
       launch_build installer
    else
       echo "Skipping 'installer' build, no valid targets in list: $TARGETS"
    fi
-# else
-   # echo "Skipping 'installer' build"
+else
+   echo "Skipping 'installer' build"
 fi
-
-
-#progbar &
-
-#function killemall() {
-#    for pid in $(jobs -p)
-#    do
-#        pgid=$(echo -n $(ps -o pgid= $pid))
-#        if [ -n "$pgid" ]; then
-#            echo "Killing child progress group: kill -TERM -$pgid"
-#            kill -TERM -$pgid
-#        fi
-#    done
-#    echo "Bad mojo when you ctrl-C, so don't"
-#}
-
-#trap killemall INT
-
-## Wait for builds to complete
-#wait %1
-#STD_BUILD_RC=$?
-
-#wait %2
-#RT_BUILD_RC=$?
-
-# Kill the progress bar
-#kill %3
-
-#if [ $STD_BUILD_RC -ne 0 -o $RT_BUILD_RC -ne 0 ]; then
-#    echo "One or more builds failed"
-#    exit 1
-#fi
 
 echo "All builds were successful"
 

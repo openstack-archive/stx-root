@@ -1,12 +1,15 @@
 #!/bin/bash
 # set -x
 
-CMDLINE="build-srpms-serial $@"
+export ME=$(basename "$0")
+CMDLINE="$ME $@"
 
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-source $DIR/spec-utils
-source $DIR/srpm-utils
-source $DIR/classify
+
+BUILD_SRPMS_SERIAL_DIR="$(dirname "$(readlink -f "${BASH_SOURCE[0]}" )" )"
+source $BUILD_SRPMS_SERIAL_DIR/spec-utils
+source $BUILD_SRPMS_SERIAL_DIR/srpm-utils
+source $BUILD_SRPMS_SERIAL_DIR/classify
+
 
 INITIAL_DIR=`pwd`
 export DISTRO="centos"
@@ -14,7 +17,7 @@ SRPM_SCRIPT="build_srpm"
 SRPM_DATA="build_srpm.data"
 PKG_DIRS_FILE="${DISTRO}_pkg_dirs"
 
-DEFAULT_SRPM_SCRIPT="$DIR/default_$SRPM_SCRIPT"
+DEFAULT_SRPM_SCRIPT="$BUILD_SRPMS_SERIAL_DIR/default_$SRPM_SCRIPT"
 SCRIPT_PATH="$DISTRO"
 DATA_PATH="$DISTRO"
 FILES_PATH="$DISTRO/files"
@@ -36,22 +39,22 @@ usage () {
     echo ""
     echo "Usage: "
     echo "   Create source rpms:"
-    echo "      build-srpms [--rt | --std | --installer] [--no-descendants] [--formal] [ list of package names ]"
+    echo "      $ME [--rt | --std | --installer] [--no-descendants] [--formal] [ list of package names ]"
     echo ""
     echo "   Delete source rpms, and the directories associated with it's creation:"
     echo "   Note: does not clean an edit environment"
-    echo "      build-srpms --clean [--rt | --std | --installer] [optional list of package names]"
+    echo "      $ME --clean [--rt | --std | --installer] [optional list of package names]"
     echo ""
     echo "   Extract an src.rpm into a pair of git trees to aid in editing it's contents,"
     echo "   one for source code and one for metadata such as the spec file."
     echo "   If --no-meta-patch is specified, then WRS patches are omitted."
-    echo "      build-srpms --edit [--rt | --std | --installer] [--no-meta-patch] [list of package names]"
+    echo "      $ME --edit [--rt | --std | --installer] [--no-meta-patch] [list of package names]"
     echo ""
     echo "   Delete an edit environment"
-    echo "      build-srpms --edit --clean [--rt | --std | --installer] [list of package names]"
+    echo "      $ME --edit --clean [--rt | --std | --installer] [list of package names]"
     echo ""
     echo "   This help page"
-    echo "      build-srpms --help"
+    echo "      $ME --help"
     echo ""
 }
 
@@ -108,7 +111,7 @@ EDIT_FLAG=0
 NO_META_PATCH_FLAG=0
 
 # read the options
-TEMP=`getopt -o ha::bc: --long serial,std,rt,installer,no-descendants,no-meta-patch,no-build-info,help,formal,clean,edit,arga::,argb,argc: -n 'build-srpms' -- "$@"`
+TEMP=$(getopt -o ha::bc: --long serial,std,rt,installer,no-descendants,no-meta-patch,no-build-info,help,formal,clean,edit,arga::,argb,argc: -n "$ME" -- "$@")
 
 if [ $? -ne 0 ]; then
     usage
@@ -186,7 +189,7 @@ if [ $FORMAL_FLAG -eq 1 ]; then
 fi
 
 if [ "x$TARGETS" == "x" ] && [ $EDIT_FLAG -eq 1 ]; then
-    echo "ERROR: a package name is required when --edit is specified"
+    echo "ERROR: $FUNCNAME (${LINENO}): a package name is required when --edit is specified"
     usage
     exit 0
 fi
@@ -201,7 +204,7 @@ if [ "x$MY_WORKSPACE" == "x" ]; then
    BUILD_ROOT="$MY_PATCH_WORKSPACE"
 
    if [ "x$MY_PATCH_WORKSPACE" == "x" ]; then
-       echo "ERROR: require one of MY_WORKSPACE or MY_PATCH_WORKSPACE be defined"
+       echo "ERROR: $FUNCNAME (${LINENO}): require one of MY_WORKSPACE or MY_PATCH_WORKSPACE be defined"
        exit 1
    fi
 fi
@@ -229,15 +232,16 @@ create_output_dirs
 
 export RPM_BUILD_BASE="$RPM_BUILD_ROOT"
 export SRPM_OUT="$RPM_BUILD_BASE/SRPMS"
+export SOURCE_OUT="$RPM_BUILD_BASE/SOURCES"
 export RPM_DIR="$RPM_BUILD_BASE/RPMS"
 
 if [ ! -d $CGCS_BASE ]; then
-   echo "ERROR: expected to find directory at '$CGCS_BASE'"
+   echo "ERROR: $FUNCNAME (${LINENO}): expected to find directory at '$CGCS_BASE'"
    exit 1
 fi
 
 if [ ! -d $BUILD_BASE ]; then
-   echo "ERROR: expected to find directory at '$BUILD_BASE'"
+   echo "ERROR: $FUNCNAME (${LINENO}): expected to find directory at '$BUILD_BASE'"
    exit 1
 fi
 
@@ -245,12 +249,12 @@ RELEASE_INFO_FILE=$STX_BASE/stx-integ/utilities/build-info/release-info.inc
 if [ -f $RELEASE_INFO_FILE ]; then
    source $RELEASE_INFO_FILE
 else
-   echo "ERROR: failed to find RELEASE_INFO_FILE=$RELEASE_INFO_FILE"
+   echo "ERROR: $FUNCNAME (${LINENO}): failed to find RELEASE_INFO_FILE=$RELEASE_INFO_FILE"
    exit 1
 fi
 
 if [ "x$PLATFORM_RELEASE" == "x" ]; then
-   echo "ERROR: PLATFORM_RELEASE is not defined in $RELEASE_INFO_FILE"
+   echo "ERROR: $FUNCNAME (${LINENO}): PLATFORM_RELEASE is not defined in $RELEASE_INFO_FILE"
    exit 1
 fi
 
@@ -258,19 +262,19 @@ export PLATFORM_RELEASE
 
 mkdir -p $RPM_BUILD_BASE
 if [ $? -ne 0 ]; then
-   echo "ERROR: Failed to create directory '$RPM_BUILD_BASE'"
+   echo "ERROR: $FUNCNAME (${LINENO}): Failed to create directory '$RPM_BUILD_BASE'"
    exit 1
 fi
 
 mkdir -p $SRPM_OUT
 if [ $? -ne 0 ]; then
-   echo "ERROR: Failed to create directory '$SRPM_OUT'"
+   echo "ERROR: $FUNCNAME (${LINENO}): Failed to create directory '$SRPM_OUT'"
    exit 1
 fi
 
 mkdir -p $RPM_DIR
 if [ $? -ne 0 ]; then
-   echo "ERROR: Failed to create directory '$RPM_DIR'"
+   echo "ERROR: $FUNCNAME (${LINENO}): Failed to create directory '$RPM_DIR'"
    exit 1
 fi
 
@@ -287,7 +291,7 @@ build_dir () {
 
    cd "$PKG_BASE"
    if [ $? -ne 0 ]; then
-      echo "ERROR: failed to cd into '$PKG_BASE'"
+      echo "ERROR: $FUNCNAME (${LINENO}): failed to cd into '$PKG_BASE'"
       return 1
    fi
 
@@ -358,7 +362,7 @@ build_dir () {
          if [ -f $ORIG_SRPM_PATH ]; then
              SRPM_COUNT=$((SRPM_COUNT + 1))
          else
-             echo "ERROR: Invalid srpm path '$p', evaluated as '$ORIG_SRPM_PATH', found in '$SRPM_LIST_PATH'"
+             echo "ERROR: $FUNCNAME (${LINENO}): Invalid srpm path '$p', evaluated as '$ORIG_SRPM_PATH', found in '$PKG_BASE/$SRPM_LIST_PATH'"
              ORIG_SRPM_PATH=""
              exit 1
          fi 
@@ -380,7 +384,7 @@ build_dir () {
 
    if [ $SPEC_COUNT -eq 0 ] && [ $SRPM_COUNT -eq 0 ]; then
       # nothing to do
-      echo "ERROR: Neither srpm_path nor .spec file not found in '$PKG_BASE/$ORIG_SPECS_PATH'"
+      echo "ERROR: $FUNCNAME (${LINENO}): Neither srpm_path nor .spec file not found in '$PKG_BASE/$ORIG_SPECS_PATH'"
       cd "$ORIG_DIR"
       return 0
    fi
@@ -388,7 +392,7 @@ build_dir () {
 
    if [ $SPEC_COUNT -gt 0 ] && [ $SRPM_COUNT -gt 0 ]; then
       # nothing to do
-      echo "ERROR: Please provide only one of srpm_path or .spec files, not both, in '$PKG_BASE/$ORIG_SPECS_PATH'"
+      echo "ERROR: $FUNCNAME (${LINENO}): Please provide only one of srpm_path or .spec files, not both, in '$PKG_BASE/$ORIG_SPECS_PATH'"
       cd $ORIG_DIR
       return 0
    fi
@@ -512,6 +516,7 @@ build_dir_srpm () {
    local BUILD_DIR="$PKG_DIR/rpmbuild"
    local FULL_BUILD_DIR="$ROOT_DIR/$BUILD_DIR"
    local SRPM_DIR="$FULL_BUILD_DIR/SRPMS"
+   local SOURCES_DIR="$SOURCE_OUT"
    
    if [ $CLEAN_FLAG -eq 1 ]; then
       # clean
@@ -535,21 +540,28 @@ build_dir_srpm () {
       if [ ! -d $ROOT_DIR ]; then
          mkdir -p "$ROOT_DIR"
          if [ $? -ne 0 ]; then
-            echo "ERROR: build_dir_srpm: mkdir '$ROOT_DIR' failed"
+            echo "ERROR: $FUNCNAME (${LINENO}): mkdir '$ROOT_DIR' failed"
             return 1
          fi
       fi
 
+      #
+      # Load data from build_srpm.data
+      #
       export DATA="$DATA_PATH/$SRPM_DATA"
       local COPY_LIST
       local COPY_LIST_TO_TAR
       local SRC_DIR
       local TIS_PATCH_VER
+      local BUILD_IS_BIG=0
+      local BUILD_IS_SLOW=0
 
-      srpm_source_build_data $DATA
-      if [ $? -ne 0 ]; then
-          echo "ERROR: build_dir_srpm: failed to source $DATA"
-          return 1
+      if [ -f $DATA ]; then
+          srpm_source_build_data $DATA
+          if [ $? -ne 0 ]; then
+              echo "ERROR: $FUNCNAME (${LINENO}): failed to source $DATA"
+              return 1
+          fi
       fi
 
       local BUILD_NEEDED=2
@@ -580,7 +592,6 @@ build_dir_srpm () {
             (
             cd $PKG_BASE
             BUILD_NEEDED=0
-            srpm_source_build_data $DATA
 
             # NOTE: SRC_DIR is not honored in this build path
 
@@ -632,7 +643,7 @@ build_dir_srpm () {
          RC=$?
          if [ $RC -ne 0 ]; then
             if [ $RC -eq 1 ]; then
-               echo "ERROR: srpm_extract_to_git: failed to extract srpm '$ORIG_SRPM_PATH'"
+               echo "ERROR: $FUNCNAME (${LINENO}): failed to extract srpm '$ORIG_SRPM_PATH'"
             fi
             return $RC
          fi
@@ -648,7 +659,6 @@ build_dir_srpm () {
       if [ -f $PKG_BASE/$DATA ]; then
          AGE2=$(
                cd $PKG_BASE
-               srpm_source_build_data $DATA
                PATH_LIST=""
 
                # NOTE: SRC_DIR is not honored in this build path
@@ -674,7 +684,7 @@ build_dir_srpm () {
       
       srpm_extract $ORIG_SRPM_PATH $PKG_BASE $ROOT_DIR $BUILD_DIR $PKG_NAME_VER
       if [ $? -ne 0 ]; then
-         echo "ERROR: build_dir_srpm: failed to extract srpm '$ORIG_SRPM_PATH'"
+         echo "ERROR: $FUNCNAME (${LINENO}): failed to extract srpm '$ORIG_SRPM_PATH'"
          return 1
       fi
 
@@ -684,7 +694,7 @@ build_dir_srpm () {
             # echo "COPY_LIST: $p"
             \cp -L -r -f -v $p $FULL_BUILD_DIR/SOURCES
             if [ $? -ne 0 ]; then
-               echo "ERROR: COPY_LIST: file not found: '$p'"
+               echo "ERROR: $FUNCNAME (${LINENO}): COPY_LIST: file not found: '$p'"
                exit 1
             fi
          done
@@ -692,7 +702,7 @@ build_dir_srpm () {
 
       srpm_assemble $FULL_BUILD_DIR $TIS_PATCH_VER
       if [ $? -ne 0 ]; then
-         echo "ERROR: build_dir_srpm: failed to assemble srpm for '$PKG_NAME_VER'"
+         echo "ERROR: $FUNCNAME (${LINENO}): failed to assemble srpm for '$PKG_NAME_VER'"
          SRPM_FAILED_REBUILD_LIST="$SRPM_FAILED_REBUILD_LIST $TARGET_FOUND"
          return 1
       fi
@@ -702,12 +712,33 @@ build_dir_srpm () {
          \cp -L -f -v $s $SRPM_OUT/
          ss=$(basename $s)
          touch $SRPM_OUT/$ss --date=$TS
+
+         mkdir -p $SOURCES_DIR/$ss
+         BIG_FLAG_FILE="$SOURCES_DIR/$ss/BIG"
+         SLOW_FLAG_FILE="$SOURCES_DIR/$ss/SLOW"
+
+         if [ $BUILD_IS_BIG -gt 0 ]; then
+             echo "$BUILD_IS_BIG" > $BIG_FLAG_FILE
+         else
+             if [ -f $BIG_FLAG_FILE ]; then
+                 \rm -f $BIG_FLAG_FILE
+             fi
+         fi
+
+         if [ $BUILD_IS_SLOW -gt 0 ]; then
+             echo "$BUILD_IS_SLOW" > $SLOW_FLAG_FILE
+         else
+             if [ -f $SLOW_FLAG_FILE ]; then
+                 \rm -f $SLOW_FLAG_FILE
+             fi
+         fi
       done
 
       SRPM_REBUILT_LIST="$SRPM_REBUILT_LIST $TARGET_FOUND"
       echo "SRPM build successful for '$PKG_NAME_VER'"
       echo "===== Build complete for '$TARGET_FOUND' ====="
       echo
+
    fi
 
    return 0
@@ -720,10 +751,10 @@ build_dir_spec () {
 
    if [ "x$TARGETS" == "x" ]; then
       NEED_BUILD=1
-      for f in `find $SPECS_BASE -maxdepth 1 -name '*.spec'`; do
-         TARGET_FOUND=`spec_find_global service "$f" 2>> /dev/null`
+      for f in $(find $SPECS_BASE -maxdepth 1 -name '*.spec'); do
+         TARGET_FOUND=$(spec_find_tag Name "$f" 2>> /dev/null)
          if [ $? -ne 0 ]; then
-             TARGET_FOUND=`spec_find_tag Name "$f" 2>> /dev/null`
+             TARGET_FOUND=$(spec_find_global service "$f" 2>> /dev/null)
              if [ $? -ne 0 ]; then
                  TARGET_FOUND=""
              fi
@@ -757,8 +788,9 @@ build_dir_spec () {
       local PKG_NAME_VER=$(spec_name_ver_rel $SPEC)
       local PKG_DIR="$NAME"
       local BUILD_DIR="$PKG_DIR/rpmbuild"
-      local FULL_BUILD_DIR="$ROOT_DIR/$BUILD_DIR"
+      local FULL_BUILD_DIR="$ROOT_DIR"
       local SRPM_DIR="$FULL_BUILD_DIR/SRPMS"
+      local SOURCES_DIR="$SOURCE_OUT"
 
       if [ $EDIT_FLAG -eq 1 ]; then
          mkdir -p $SRPM_WORK
@@ -796,6 +828,25 @@ build_dir_spec () {
          local BUILD_NEEDED=2
          local SRPM_OUT_PATH2
 
+         #
+         # Load data from build_srpm.data
+         #
+         local COPY_LIST
+         local COPY_LIST_TO_TAR
+         local SRC_DIR
+         local OPT_DEP_LIST
+         local TIS_PATCH_VER
+         local BUILD_IS_BIG=0
+         local BUILD_IS_SLOW=0
+
+         if [ -f $DATA ]; then
+             srpm_source_build_data $DATA
+             if [ $? -ne 0 ]; then
+                 echo "ERROR: $FUNCNAME (${LINENO}): failed to source $DATA"
+                 return 1
+             fi
+         fi
+
          for SRPM_PATH2 in `find "$RPMBUILD_BASE/SRPMS" -name '*.src.rpm' | sort -V`; do
             if [ $BUILD_NEEDED -eq 2 ]; then
                BUILD_NEEDED=0
@@ -816,7 +867,6 @@ build_dir_spec () {
                (
                cd $PKG_BASE
                BUILD_NEEDED=0
-               srpm_source_build_data $DATA
                if [ "x$SRC_DIR" != "x" ]; then
                   if [ -d "$SRC_DIR" ]; then
                      n=`find $SRC_DIR -type f -cnewer $SRPM_PATH2 | grep -v '[/][.]git$' | grep -v '[/][.]git[/]' | wc -l`
@@ -849,10 +899,6 @@ build_dir_spec () {
          done
    
          if [ $EDIT_FLAG -eq 1 ]; then
-            local COPY_LIST
-            local COPY_LIST_TO_TAR
-            local SRC_DIR
-            local TIS_PATCH_VER
 
             PKG_CLASSIFICATION=$(classify $PKG_BASE)
             echo "$PKG_CLASSIFICATION = classify $PKG_BASE"
@@ -863,18 +909,12 @@ build_dir_spec () {
                return 1
             fi
 
-            srpm_source_build_data $DATA
-            if [ $? -ne 0 ]; then
-                echo "ERROR: build_dir_srpm: failed to source $DATA"
-                return 1
-            fi
-
             echo "tar_and_spec_extract_to_git '$SPEC' '$PKG_BASE' '$ROOT_DIR' '$BUILD_DIR' '$PKG_NAME_VER' '$NO_META_PATCH_FLAG' '$TIS_PATCH_VER'"
             tar_and_spec_extract_to_git "$SPEC" "$PKG_BASE" "$ROOT_DIR" "$BUILD_DIR" "$PKG_NAME_VER" "$NO_META_PATCH_FLAG" "$TIS_PATCH_VER"
             RC=$?
             if [ $RC -ne 0 ]; then
                if [ $RC -eq 1 ]; then
-                  echo "ERROR: srpm_extract_to_git: failed to extract srpm '$ORIG_SRPM_PATH'"
+                  echo "ERROR: $FUNCNAME (${LINENO}): failed to extract srpm '$ORIG_SRPM_PATH'"
                fi
                return $RC
             fi
@@ -905,6 +945,7 @@ build_dir_spec () {
              rm -rf "$RPMBUILD_BASE"
          fi
 
+         echo "mkdir -p $WORK_BASE $SRPM_PATH $SPEC_PATH $SOURCES_PATH"
          mkdir -p "$WORK_BASE" && \
          mkdir -p "$SRPM_PATH" && \
          mkdir -p "$SPEC_PATH" && \
@@ -915,13 +956,15 @@ build_dir_spec () {
 
          \cp -L -f -v $SPECS_BASE/*.spec $SPEC_PATH/
          if [ $? -ne 0 ]; then
-             echo "ERROR: Failed to copy spec files from '$SPECS_BASE' to '$SPEC_PATH'"
+             echo "ERROR: $FUNCNAME (${LINENO}): Failed to copy spec files from '$SPECS_BASE' to '$SPEC_PATH'"
          fi
 
+         #
          # build
+         #
          $MAKE_SRPM
          if [ $? -ne 0 ]; then
-            echo "ERROR: script failed '$MAKE_SRPM'"
+            echo "ERROR: $FUNCNAME (${LINENO}): script failed '$MAKE_SRPM'"
             SRPM_FAILED_REBUILD_LIST="$SRPM_FAILED_REBUILD_LIST $TARGET_FOUND"
             exit 1
          fi
@@ -931,7 +974,6 @@ build_dir_spec () {
          if [ -f $PKG_BASE/$DATA ]; then
             AGE2=$(
                   cd $PKG_BASE
-                  srpm_source_build_data $DATA
                   PATH_LIST=""
                   if [ "x$SRC_DIR" != "x" ]; then
                      if [ -d "$SRC_DIR" ]; then
@@ -964,6 +1006,27 @@ build_dir_spec () {
              \cp -L -f $s $SRPM_OUT/
              ss=$(basename $s)
              touch $SRPM_OUT/$ss --date=$TS
+
+             mkdir -p $SOURCES_DIR/$ss
+             BIG_FLAG_FILE="$SOURCES_DIR/$ss/BIG"
+             SLOW_FLAG_FILE="$SOURCES_DIR/$ss/SLOW"
+
+             if [ $BUILD_IS_BIG -gt 0 ]; then
+                 echo $BUILD_IS_BIG >  $BIG_FLAG_FILE
+             else
+                 if [ -f $BIG_FLAG_FILE ]; then
+                     \rm -f $BIG_FLAG_FILE
+                 fi
+             fi
+
+             if [ $BUILD_IS_SLOW -gt 0 ]; then
+                 echo $BUILD_IS_SLOW > $SLOW_FLAG_FILE
+             else
+                 if [ -f $SLOW_FLAG_FILE ]; then
+                     \rm -f $SLOW_FLAG_FILE
+                 fi
+             fi
+
          done
 
          SRPM_REBUILT_LIST="$SRPM_REBUILT_LIST $TARGET_FOUND"
@@ -984,7 +1047,7 @@ if [ -L $BUILD_ROOT/repo ]; then
         echo "Error: MY_REPO changed since last build"
         echo "   old path: $REPO_DEST"
         echo "   new path: $SRC_ROOT"
-        echo "Please run 'build-srpms --clean' if you want to compile from a new source tree"
+        echo "Please run '$ME --clean' if you want to compile from a new source tree"
         exit 1
     fi
 fi
@@ -1054,10 +1117,10 @@ for g in `find "$SRC_BASE" -type d -name .git | sort -V`; do
                exit 1
             fi
          else
-            echo "ERROR: Failed to find 'centos' in '$p', found in file '$GIT_ROOT/$PKG_DIRS_FILE'"
+            echo "ERROR: $FUNCNAME (${LINENO}): Failed to find 'centos' in '$p', found in file '$GIT_ROOT/$PKG_DIRS_FILE'"
          fi
       else
-         echo "ERROR: Bad path '$p' in file '$GIT_ROOT/$PKG_DIRS_FILE'"
+         echo "ERROR: $FUNCNAME (${LINENO}): Bad path '$p' in file '$GIT_ROOT/$PKG_DIRS_FILE'"
       fi
    done
 done
@@ -1121,15 +1184,16 @@ if [ $ALL -eq 1 ]; then
         done
     done
 
+    echo "Auditing for obsolete srpms Phase 2"
     for r in $(find $SRPM_OUT -name '*.src.rpm' | sort -V); do
         NAME=$(rpm -q --queryformat '%{NAME}\n' -p $r 2>> /dev/null)
+        ALT_NAME=$(echo $NAME | sed "s#-$BUILD_TYPE\$##")
         FOUND=0
-        for p in $PACKAGES_CONSIDERED; do
-            if [[ "$NAME" == "$p" || ( "$BUILD_TYPE" != "std" && "$NAME" == "$p-$BUILD_TYPE" ) ]]; then
-                FOUND=1
-                break
-            fi
-        done
+
+        if [[ -f "$AUDIT_DIR/$NAME" || ( "$BUILD_TYPE" != "std" && -f "$AUDIT_DIR/$ALT_NAME" ) ]]; then
+            FOUND=1
+        fi
+
         if [ $FOUND -eq 0 ]; then
             for INPUT_DIR in $(find $BUILD_INPUTS -name $NAME | sort -V); do
                 if [ -d "$INPUT_DIR/rpmbuild/SRPMS" ]; then
@@ -1165,12 +1229,14 @@ if [ $EDIT_FLAG -ne 1 ]; then
    echo "==== Update repodata complete ====="
 fi
 
+FINAL_RC=0
 if [ $CLEAN_FLAG -eq 0 ] && [ $EDIT_FLAG -eq 0 ]; then
     echo ""
     if [ "$SRPM_FAILED_REBUILD_LIST" != "" ]; then
        N=`echo "$SRPM_FAILED_REBUILD_LIST" | wc -w`
        echo "Failed to build $N packages:"
        echo "   $SRPM_FAILED_REBUILD_LIST"
+       FINAL_RC=1
     fi
     if [ "$SRPM_REBUILT_LIST" != "" ]; then
        N=`echo "$SRPM_REBUILT_LIST" | wc -w`
@@ -1187,9 +1253,9 @@ fi
 
 if [ "$UNRESOLVED_TARGETS" != " " ]; then
     echo ""
-    echo "ERROR: failed to resolve build targets: $UNRESOLVED_TARGETS"
-    exit 1
+    echo "ERROR: $FUNCNAME (${LINENO}): failed to resolve build targets: $UNRESOLVED_TARGETS"
+    FINAL_RC=1
 fi
 
-exit 0
+exit $FINAL_RC
 ) 2>&1 | stdbuf -o0 awk '{ print strftime("%H:%M:%S"), $0; fflush(); }' | tee $(date "+$MY_WORKSPACE/build-srpms-serial_%Y-%m-%d_%H-%M-%S.log") ; exit ${PIPESTATUS[0]}

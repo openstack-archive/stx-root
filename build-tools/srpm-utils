@@ -1694,7 +1694,7 @@ tarball_extract () {
 
        RAW_SCRIPT=$ROOT_DIR/$PKG_DIR/raw_script
        EXTRACT_SCRIPT=$ROOT_DIR/$PKG_DIR/extract_script
-       echo "srpm_create_raw_extract_script '$SPEC_DIR/$SPEC' '$ROOT_DIR/$PKG_DIR'  '$ROOT_DIR/$BUILD_DIR'  '$TARGET_ARCH' '$TIS_PATCH_VER' '$RAW_SCRIPT'"
+       echo "srpm_create_raw_extract_script '$SPEC_DIR/$SPEC' '$ROOT_DIR/$PKG_DIR'  '$ROOT_DIR/$BUILD_DIR'  '$TARGET_ARCH' '$TIS_PATCH_VER' '$RAW_SCRIPT' '$TAR_DIR'"
        srpm_create_raw_extract_script "$SPEC_DIR/$SPEC" "$ROOT_DIR/$PKG_DIR" "$ROOT_DIR/$BUILD_DIR"  "$TARGET_ARCH" "$TIS_PATCH_VER" "$RAW_SCRIPT" "$TAR_DIR"
        if [ $? -ne 0 ]; then
            echo "ERROR: $FUNCNAME (${LINENO}): srpm_create_raw_extract_script failed"
@@ -1909,9 +1909,12 @@ tarball_extract () {
       pwd
 
       # Delete old branch if it exists
+      echo "git checkout $BRANCH  @  $(pwd)"
       git checkout $BRANCH &>> /dev/null
       if [ $? -eq 0 ]; then
+          echo "git checkout master  @  $(pwd)"
           git checkout master
+          echo "git branch -D $BRANCH  @  $(pwd)"
           git branch -D $BRANCH
           if [ $? -ne 0 ]; then
              echo "ERROR: $FUNCNAME (${LINENO}): failed to delete branch '$BRANCH'"
@@ -1922,8 +1925,10 @@ tarball_extract () {
 
       # Determine origin of our branch
       if [ $TAR_HAS_CHANGED -gt 0 ]; then
+         echo "git checkout master  @  $(pwd)"
          git checkout master
       else
+         echo "git checkout $ORIG_PRE_WRS_TAG  @  $(pwd)"
          git checkout $ORIG_PRE_WRS_TAG
          if [ $? -eq 0 ]; then
             NEED_TAR_EXTRACT=0
@@ -2526,7 +2531,7 @@ srpm_extract_to_git () {
             echo "COPY_LIST: $p"
             \cp -L -f -r -v $p $META_PATCH_TARGET_DIR/SOURCES
             if [ $? -ne 0 ]; then
-               echo "ERROR: COPY_LIST: file not found: '$p'"
+               echo "ERROR: $FUNCNAME (${LINENO}): COPY_LIST: file not found: '$p'"
                cd $ORIG_DIR
                return 1
             fi
@@ -2563,6 +2568,7 @@ srpm_extract_to_git () {
             fi
             mkdir -p $RPMBUILD_BUILD_DIR2
 
+            echo "srpm_create_raw_extract_script '$SPEC_DIR/$SPEC' '$ROOT_DIR/$PKG_DIR'  '$ROOT_DIR/$BUILD_DIR'  '$TARGET_ARCH' '$TIS_PATCH_VER' '$RAW_SCRIPT'  '$TAR_DIR'"
             srpm_create_raw_extract_script "$SPEC_DIR/$SPEC" "$ROOT_DIR/$PKG_DIR"  "$ROOT_DIR/$BUILD_DIR"  "$TARGET_ARCH" "$TIS_PATCH_VER" "$RAW_SCRIPT"  "$TAR_DIR"
             if [ $? -ne 0 ]; then
                echo "ERROR: $FUNCNAME (${LINENO}): srpm_create_raw_extract_script post meta-patches failed"
@@ -2592,7 +2598,7 @@ srpm_extract_to_git () {
              exit $RC
             ) | tee $EXTRACT_SCRIPT.post.log
             if [ ${PIPESTATUS[0]} -ne 0 ] ; then
-               echo "ERROR: Failed in script '$EXTRACT_SCRIPT'"
+               echo "ERROR: $FUNCNAME (${LINENO}): Failed in script '$EXTRACT_SCRIPT'"
                cd $ORIG_DIR
                return 1
             fi
@@ -2843,7 +2849,7 @@ srpm_apply_patch() {
              source $PATCH_SCRIPT
             )
             if [ $? -ne 0 ]; then
-               echo "ERROR: Failed to apply patch '$PATCH' using script '$PATCH_SCRIPT'"
+               echo "ERROR: $FUNCNAME (${LINENO}): Failed to apply patch '$PATCH' using script '$PATCH_SCRIPT'"
                return 1
             fi
          else
@@ -3151,31 +3157,31 @@ srpm_git_revision_count () {
 srpm_source_build_data () {
    local DATA_FILE=$1
    if [ ! -f $DATA_FILE ]; then
-       >&2 echo "ERROR: $DATA_FILE not found"
+       >&2 echo "ERROR: $FUNCNAME (${LINENO}): $DATA_FILE not found"
        return 1
    fi
    source $DATA_FILE
 
    # TIS_PATCH_VER is mandatory
    if [ -z "$TIS_PATCH_VER" ]; then
-       >&2 echo "ERROR: srpm_source_srpm_data: TIS_PATCH_VER must be set in $DATA_FILE"
+       >&2 echo "ERROR: $FUNCNAME (${LINENO}): TIS_PATCH_VER must be set in $DATA_FILE"
        return 1
    elif [[ "$TIS_PATCH_VER" == GITREVCOUNT* ]]; then
        # Calculate the patch version dynamically based on the number of commits
        # in the subgit.  This also supports adding a "+N" at the end to force
        # an additional increment (e.g., TIS_PATCH_VER=GITREVCOUNT+1)
        if [ -z "$TIS_BASE_SRCREV" ]; then
-          >&2 echo "ERROR: srpm_source_srpm_data: TIS_BASE_SRCREV must be set in $DATA_FILE"
+          >&2 echo "ERROR: $FUNCNAME (${LINENO}): TIS_BASE_SRCREV must be set in $DATA_FILE"
           return 1
        fi
        if [ ! -d "$SRC_DIR" ]; then
-          >&2 echo "ERROR: srpm_source_srpm_data: SRC_DIR must specify a subgit root path"
+          >&2 echo "ERROR: $FUNCNAME (${LINENO}): SRC_DIR must specify a subgit root path"
           return 1
        fi
        TIS_PATCH_INC=${TIS_PATCH_VER//[A-Z \+]/}
        TIS_PATCH_VER=$(srpm_git_revision_count $SRC_DIR $TIS_BASE_SRCREV)
        if [ $? -ne 0 ] || [ "$TIS_PATCH_VER" == "" ]; then
-          >&2 echo "ERROR: srpm_source_srpm_data: Invalid TIS_BASE_SRCREV '$TIS_BASE_SRCREV'"
+          >&2 echo "ERROR: $FUNCNAME (${LINENO}): Invalid TIS_BASE_SRCREV '$TIS_BASE_SRCREV'"
           return 1
        fi
        if [[ "$TIS_PATCH_INC" =~ ^-?[0-9]+$ ]]; then
