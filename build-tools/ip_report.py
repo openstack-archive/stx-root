@@ -139,13 +139,13 @@ class IPReport(object):
                 if filename.endswith('rpm'):
                     self.built_binaries.append(filename)
 
-        print ('Looking up packages for which we have source...')
+        print('Looking up packages for which we have source...')
         self.original_src_pkgs = dict()
         self.build_original_src_pkgs()
-        print ('Looking up packages we built...')
+        print('Looking up packages we built...')
         self.built_src_pkgs = dict()
         self.build_built_src_pkgs()
-        print ('Looking up packages we built...')
+        print('Looking up packages we built...')
         self.hardcoded_lookup_dict = dict()
         self.build_hardcoded_lookup_dict()
 
@@ -180,17 +180,17 @@ class IPReport(object):
         if 'MY_WORKSPACE' in os.environ:
             self.workspace = os.environ['MY_WORKSPACE']
         else:
-            print 'Could not find $MY_WORKSPACE'
+            print('Could not find $MY_WORKSPACE')
             raise IOError('Could not fine $MY_WORKSPACE')
 
         if 'MY_REPO' in os.environ:
             self.repo = os.environ['MY_REPO']
         else:
-            print 'Could not find $MY_REPO'
+            print('Could not find $MY_REPO')
             raise IOError('Could not fine $MY_REPO')
 
     def do_bin_pkgs(self):
-        print ('Gathering binary package information')
+        print('Gathering binary package information')
         self.read_bin_pkgs()
 
     def read_bin_pkgs(self):
@@ -268,7 +268,7 @@ class IPReport(object):
                          src_pkg.desc, 'Runtime', src_pkg.shipped_as, modified_string, 'No', src_pkg.licences,
                          src_pkg.origin, kmod_string, src_pkg.notes])
                     if 'unknown' in src_pkg.origin.lower():
-                        print (
+                        print(
                         'Warning: Could not determine origin of ' + src_pkg.name + '.  Please investigate/populate manually')
 
     def bin_to_src(self):
@@ -289,19 +289,19 @@ class IPReport(object):
             if 'shim-signed' in bin_pkg.source:
                 for tmp in self.built_src_pkgs:
                     if 'shim-signed' in tmp:
-                        print ('shim-signed hack -- ' + bin_pkg.source + ' to ' + tmp)
+                        print('shim-signed hack -- ' + bin_pkg.source + ' to ' + tmp)
                         bin_pkg.source = tmp
                         break
             if 'shim-unsigned' in bin_pkg.source:
                 for tmp in self.built_src_pkgs:
                     if 'shim-0' in tmp:
-                        print ('shim-unsigned hack -- ' + bin_pkg.source + ' to ' + tmp)
+                        print('shim-unsigned hack -- ' + bin_pkg.source + ' to ' + tmp)
                         bin_pkg.source = tmp
                         break
             if 'grub2-efi-pxeboot' in bin_pkg.source:
                 for tmp in self.built_src_pkgs:
                     if 'grub2-2' in tmp:
-                        print ('grub2-efi-pxeboot hack -- ' + bin_pkg.source + ' to ' + tmp)
+                        print('grub2-efi-pxeboot hack -- ' + bin_pkg.source + ' to ' + tmp)
                         bin_pkg.source = tmp
                         break
 
@@ -464,26 +464,27 @@ def main(argv):
 
     for opt, arg in opts:
         if opt in ('-h', '--help'):
-            print 'usage:'
-            print ' ip_report.py [options]'
-            print ' Creates and IP report in $MY_WORKSPACE/export/ip_report '
-            print ' Source RPMs (both Wind River and non WR) are placed in subdirs within that path'
-            print ''
-            print 'Options:'
-            print '  -h/--help                - this help'
-            print '  -d <file>/--delta=<file> - create "notes" field, comparing report with a previous report'
-            print '  -n/--no-copy             - do not copy files into subdirs (this is faster, but means you'
-            print '                             don\'t get SHA sums for files)'
-            print '  -w <path>/--workspace=<path> - use the specified path as workspace, instead of $MY_WORKSPACE'
-            print '  -r <path>/--repo=<path>  - use the specified path as repo, instead of $MY_REPO'
-            print '  -o <path>/--output=<path> - output to specified path (instead of $MY_WORKSPACE/export/ip_report)'
-            print '  -s/--strip               - strip (remove) unchanged files if copied'
+            print('usage:')
+            print(' ip_report.py [options]')
+            print(' Creates and IP report in $MY_WORKSPACE/export/ip_report ')
+            print(' Source RPMs (both Wind River and non WR) are placed in subdirs within that path')
+            print('')
+            print('Options:')
+            print('  -h/--help                - this help')
+            print('  -d <file>/--delta=<file> - create "notes" field, comparing report with a previous report')
+            print('  -n/--no-copy             - do not copy files into subdirs (this is faster, but means you')
+            print('                             don\'t get SHA sums for files)')
+            print('  -w <path>/--workspace=<path> - use the specified path as workspace, instead of $MY_WORKSPACE')
+            print('  -r <path>/--repo=<path>  - use the specified path as repo, instead of $MY_REPO')
+            print('  -o <path>/--output=<path> - output to specified path (instead of
+                                                 $MY_WORKSPACE/export/ip_report)')
+            print('  -s/--strip               - strip (remove) unchanged files if copied')
             exit()
         elif opt in ('-d', '--delta'):
             delta_file = os.path.normpath(arg)
             delta_file = os.path.expanduser(delta_file)
             if not os.path.exists(delta_file):
-                print 'Cannot locate ' + delta_file
+                print('Cannot locate ' + delta_file)
                 exit(1)
         elif opt in ('-w', '--workspace'):
             workspace = os.path.normpath(arg)
@@ -499,11 +500,11 @@ def main(argv):
         elif opt in ('-s', '--strip-unchanged'):
             strip_unchanged = True
 
-    print ('Doing IP report')
+    print('Doing IP report')
     if delta_file is not None:
-        print 'Delta from ' + delta_file
+        print('Delta from ' + delta_file)
     else:
-        print 'No delta specified'
+        print('No delta specified')
     ip_report = IPReport(workspace=workspace, repo=repo)
 
     ip_report.do_bin_pkgs()
