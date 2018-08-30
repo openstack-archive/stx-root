@@ -4,6 +4,7 @@
 
 BUILD_PKGS_PARALLEL_DIR="$(dirname "$(readlink -f "${BASH_SOURCE[0]}" )" )"
 
+source "${BUILD_PKGS_PARALLEL_DIR}/git-utils.sh"
 source "${BUILD_PKGS_PARALLEL_DIR}/spec-utils"
 
 
@@ -141,8 +142,7 @@ find_targets () {
    local RESULT=" "
    local FOUND=0
 
-   for g in $(find $MY_REPO -type d -name .git); do
-      d=$(dirname $g)
+   for d in $GIT_LIST; do
       if [ -f $d/$centos_pkg_dirs ]; then
          for d2 in $(grep -v '^#' $d/$centos_pkg_dirs); do
             name=""
@@ -364,7 +364,15 @@ function progbar()
 }
 
 # Create $MY_WORKSPACE if it doesn't exist already
-mkdir -p $MY_WORKSPACE
+mkdir -p "${MY_WORKSPACE}"
+if [ $? -ne 0 ]; then
+    echo "Failed to create directory '${MY_WORKSPACE}'"
+    exit 1
+fi
+
+echo "Capture build context"
+git_context > "${MY_WORKSPACE}/CONTEXT"
+
 
 if [ $STD_BUILD -eq 1 ]; then
    if [ "x$TARGETS" == "x  " ] || [ "$TARGETS_STD" != " " ] || [ "$TARGETS_MISC" != " " ]; then
