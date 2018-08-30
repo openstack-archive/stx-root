@@ -6,6 +6,7 @@ CMDLINE="$ME $@"
 
 
 BUILD_SRPMS_SERIAL_DIR="$(dirname "$(readlink -f "${BASH_SOURCE[0]}" )" )"
+source $BUILD_SRPMS_SERIAL_DIR/git-utils.sh
 source $BUILD_SRPMS_SERIAL_DIR/spec-utils
 source $BUILD_SRPMS_SERIAL_DIR/srpm-utils
 source $BUILD_SRPMS_SERIAL_DIR/classify
@@ -647,7 +648,8 @@ build_dir_srpm () {
             return $RC
          fi
 
-         local LOC=$(for g in $(find $PKG_ROOT_DIR/gits -type d -name .git); do d=$(dirname $g); (cd $d;  git tag | grep "pre_wrs_$PKG_NAME_VER" >> /dev/null; if [ $? -eq 0 ]; then echo $d; fi); done | head -n 1 )
+         local LOC
+         LOC=$(git_list_containing_tag "${PKG_ROOT_DIR}/gits" "pre_wrs_$PKG_NAME_VER" | head -n 1 )
          echo "===== '$TARGET_FOUND' has been extracted for editing. ====="
          echo "===== Metadata can be found at: $PKG_ROOT_DIR/rpmbuild"
          echo "===== Source code can be found at: $LOC"
@@ -922,7 +924,8 @@ build_dir_spec () {
                return $RC
             fi
    
-            local LOC=$(for g in $(find $PKG_ROOT_DIR/gits -type d -name .git); do d=$(dirname $g); (cd $d;  git branch --all | grep "$PKG_NAME_VER" >> /dev/null; if [ $? -eq 0 ]; then echo $d; fi); done | head -n 1 )
+            local LOC
+            LOC=$(git_list_containing_branch "${PKG_ROOT_DIR}/gits" "${PKG_NAME_VER}" | head -n 1 )
             echo "===== '$TARGET_FOUND' has been extracted for editing. ====="
             echo "===== Metadata can be found at: $PKG_ROOT_DIR/rpmbuild"
             echo "===== Source code can be found at: $LOC"
@@ -1093,8 +1096,7 @@ if [ $EDIT_FLAG -eq 0 ]; then
     fi
 fi
 
-for g in $(find "$SRC_BASE" -type d -name .git | sort -V); do
-   GIT_ROOT=$(dirname $g)
+for GIT_ROOT in $GIT_LIST; do
    export GIT_BASE="$GIT_ROOT"
    for p in $(cat $GIT_ROOT/$PKG_DIRS_FILE 2>> /dev/null); do
       src_dir="$GIT_ROOT/$p"
@@ -1136,8 +1138,7 @@ if [ $ALL -eq 1 ]; then
     echo
     echo "Auditing for obsolete srpms"
     PACKAGES_CONSIDERED=""
-    for g in $(find $SRC_BASE -type d -name .git | sort -V); do
-        GIT_ROOT=$(dirname $g)
+    for GIT_ROOT in $GIT_LIST; do
         for p in $(cat $GIT_ROOT/$PKG_DIRS_FILE 2>> /dev/null); do
             src_dir="$GIT_ROOT/$p"
             if [ -d $src_dir ]; then
