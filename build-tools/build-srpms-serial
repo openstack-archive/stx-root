@@ -479,7 +479,7 @@ build_dir_srpm () {
 
    local ORIG_SRPM=$(basename $ORIG_SRPM_PATH)
    local NAME=$(rpm -q --queryformat '%{NAME}\n' --nosignature -p $ORIG_SRPM_PATH)
-   local PKG_NAME_VER=$(rpm -q --queryformat '%{NAME}-%{VERSION}-%{RELEASE}\n' --nosignature -p $ORIG_SRPM_PATH
+   local PKG_NAME_VER=$(rpm -q --queryformat '%{NAME}-%{VERSION}-%{RELEASE}\n' --nosignature -p $ORIG_SRPM_PATH)
    local PKG_DIR="$NAME"
    local TARGET_FOUND=""
    local RC=0
