@@ -1,0 +1,9 @@
+Code-Review+2: Saul Wold <sgw@linux.intel.com>
+Code-Review+2: Jason McKenna <jason.mckenna@windriver.com>
+Workflow+1: Jason McKenna <jason.mckenna@windriver.com>
+Verified+2: Zuul
+Submitted-by: Zuul
+Submitted-at: Thu, 30 Aug 2018 16:24:26 +0000
+Reviewed-on: https://review.openstack.org/597708
+Project: openstack/stx-root
+Branch: refs/heads/master
