@@ -6,6 +6,7 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
+
 export ME=$(basename "$0")
 CMDLINE="$ME $@"
 
@@ -50,6 +51,75 @@ usage () {
 
 number_of_cpus () {
     /usr/bin/nproc
+}
+
+join_by () { local IFS="$1"; shift; echo "$*"; }
+
+create-no-clean-list () {
+   local MY_YUM_CONF=$(create-yum-conf)
+   local NO_CLEAN_LIST_FILE=$MY_WORKSPACE/no_clean_list.txt
+   local NEED_REBUILD=0
+
+   if [ ! -f $NO_CLEAN_LIST_FILE ]; then
+       NEED_REBUILD=1
+   else
+       if [ -f MY_BUILD_CFG ]; then
+           if [ -f MY_BUILD_CFG ]; then
+               find "$MY_BUILD_CFG" -not -newermm "$NO_CLEAN_LIST_FILE" | grep -q $(basename $MY_BUILD_CFG)
+               if [ $? -eq 0 ]; then
+                   NEED_REBUILD=1
+               fi
+           fi
+       fi
+   fi
+
+   if [ $NEED_REBUILD -eq 1 ]; then
+       local install_groups=""
+       local install_packages=""
+       local p
+    
+       for p in $(grep "config_opts\['chroot_setup_cmd'\]" $MY_BUILD_CFG | tail -n1 | cut -d '=' -f 2 | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e "s/^'//" -e "s/'$//" -e 's/^install //'); do
+          if [[ $p == @* ]] ; then
+              install_groups=$(join_by ' ' $install_groups $(echo $p | cut -c 2-))
+          else
+              install_packages=$(join_by ' ' $install_packages $p)
+          fi
+       done
+    
+       local noclean_last_list_len=0
+       local noclean_list=""
+       local tmp_list=""
+       local g
+    
+       for g in $install_groups; do
+           tmp_list=$(yum -c $MY_YUM_CONF groupinfo $g 2>> /dev/null | awk 'f;/Mandatory Packages:/{f=1}' | cut -c 5-)
+           noclean_list=$(join_by ' ' $noclean_list $tmp_list)
+       done
+    
+       noclean_list=$(join_by ' ' $noclean_list $install_packages)
+       noclean_list=$(echo $noclean_list | tr ' ' '\n' | sort --uniq)
+       noclean_list_len=$(echo $noclean_list | wc -w)
+    
+       while [ $noclean_list_len -gt $noclean_last_list_len ]; do
+           noclean_last_list_len=$noclean_list_len
+           noclean_list=$( (yum -c $MY_YUM_CONF deplist $noclean_list 2>> /dev/null | grep provider: | awk '{ print $2 }' | awk -F . '{ print $1 }'; for p in $noclean_list; do echo $p; done) | sort --uniq)
+           noclean_list_len=$(echo $noclean_list | wc -w)
+       done
+   
+       echo $noclean_list > $NO_CLEAN_LIST_FILE
+   fi
+
+   cat $NO_CLEAN_LIST_FILE
+}
+
+str_lst_contains() { 
+   TARGET="$1"
+   LST="$2"
+   if [[ $LST =~ (^|[[:space:]])$TARGET($|[[:space:]]) ]] ; then 
+      return 0
+   else
+      return 1
+   fi
 }
 
 
@@ -259,9 +329,10 @@ build_order () {
 set_mock_symlinks () {
    local LNK
    local DEST
+   local CFG=$1
    if [ -d /localdisk/loadbuild/mock ]; then
       mkdir -p $MY_WORKSPACE
-      LNK=$(echo "/localdisk/loadbuild/mock/$(basename $MY_BUILD_CFG)" | sed 's/.cfg$//')
+      LNK=$(echo "/localdisk/loadbuild/mock/$(basename $CFG)" | sed 's/.cfg$//')
       if [ ! -L $LNK ] && [ -d $LNK ]; then
          echo "WARNING: Found directory at '$LNK' when symlink was expected. Fixing..."
          \rm -rf $LNK
@@ -287,7 +358,7 @@ set_mock_symlinks () {
 
    if [ -d /localdisk/loadbuild/mock-cache ]; then
       mkdir -p $MY_WORKSPACE/cache
-      LNK=$(echo "/localdisk/loadbuild/mock-cache/$(basename $MY_BUILD_CFG)" | sed 's/.cfg$//')
+      LNK=$(echo "/localdisk/loadbuild/mock-cache/$(basename $CFG)" | sed 's/.cfg$//')
       if [ ! -L $LNK ] && [ -d $LNK ]; then
          echo "WARNING: Found directory at '$LNK' when symlink was expected. Fixing..."
          \rm -rf $LNK
@@ -314,8 +385,9 @@ set_mock_symlinks () {
 
 remove_mock_symlinks () {
    local LNK
+   local CFG=$1
    if [ -d /localdisk/loadbuild/mock ]; then
-      LNK=$(echo "/localdisk/loadbuild/mock/$(basename $MY_BUILD_CFG)" | sed 's/.cfg$//')
+      LNK=$(echo "/localdisk/loadbuild/mock/$(basename $CFG)" | sed 's/.cfg$//')
       if [ -L $LNK ]; then
          \rm -f $LNK
       fi
@@ -341,30 +413,523 @@ remove_mock_symlinks () {
    fi
 }
 
+kill_descendents ()
+{
+    local kill_pid=$1
+    local kill_all=$2
+    local need_stop=$3
+    local iteration=$4
+    local ret=0
+    local rc=0
 
+    # echo "kill_descendents pid=$kill_pid, all=$kill_all stop=$need_stop, iteration=$iteration"
+
+    local relevant_recursive_children="$ME"
+    local relevant_recursive_promote_children="mock"
+    local relevant_other_children="mockchain-parallel"
+
+    local recursive_promote_children=$(for relevant_child in $relevant_recursive_promote_children; do pgrep -P $kill_pid $relevant_child; done)
+    local recursive_children=$(for relevant_child in $relevant_recursive_children; do pgrep -P $kill_pid $relevant_child; done)
+    local other_children=""
+
+    if [ $kill_all -eq 1 ]; then
+        recursive_promote_children=""
+        recursive_children=$(pgrep -P $kill_pid)
+    fi
+    
+    if [ $iteration -eq 0 ]; then
+        other_children=$(for relevant_child in $relevant_other_children; do pgrep -P $kill_pid $relevant_child; done)
+        if [ "$other_children" != "" ]; then
+            ret=1
+        fi
+    fi
+
+    if [ $need_stop -eq 1 ]; then
+        for pid in $recursive_children $recursive_promote_children; do
+            kill -SIGSTOP $pid &> /dev/null
+        done
+    fi
+
+    for pid in $recursive_children; do
+        kill_descendents "$pid" $kill_all $need_stop $((iteration + 1)) 
+    done
+    for pid in $recursive_promote_children; do
+        kill_descendents "$pid" 1 1 $((iteration + 1))
+    done
+
+    # echo "kill: $recursive_children $recursive_promote_children"
+    for pid in $recursive_children $recursive_promote_children; do
+        kill $pid &> /dev/null
+        rc=$?
+        if [ $need_stop -eq 1 ]; then
+            kill -SIGCONT $pid &> /dev/null
+        fi
+        if [ $rc -eq 0 ] && [ $iteration -eq 0 ]; then
+            wait $pid
+        fi
+    done
+
+    # echo "kill: $other_children"
+    for pid in $other_children; do
+        kill $pid &> /dev/null
+        rc=$?
+        if [ $rc -eq 0 ] && [ $iteration -eq 0 ]; then
+            wait $pid
+        fi
+    done
+
+    return $ret
+}
+
+function my_exit_n() {
+    local need_mock_cleanup
+    # echo "$BASHPID: $ME: my_exit: killing children"
+    local need_mock_cleanup
+    kill_descendents  $BASHPID 0 0 0
+    need_mock_cleanup=$?
+    # echo "$BASHPID: $ME: my_exit: waiting"
+    wait
+    # echo "$BASHPID: $ME: my_exit: wait complete"
+    # echo "$BASHPID: $ME: my_exit: need_mock_cleanup=$need_mock_cleanup"
+}
+
+function my_exit() {
+    local need_mock_cleanup
+    # echo "$BASHPID: $ME: my_exit: killing children"
+    local need_mock_cleanup
+    kill_descendents  $BASHPID 0 0 0
+    need_mock_cleanup=$?
+    # echo "$BASHPID: $ME: my_exit: waiting"
+    wait
+    # echo "$BASHPID: $ME: my_exit: wait complete"
+    # echo "$BASHPID: $ME: my_exit: need_mock_cleanup=$need_mock_cleanup"
+    if [ $need_mock_cleanup -ne 0 ]; then
+        sleep 1
+    fi
+}
+
+function my_sigint_n() {
+    local ARG=$1
+    echo "$BASHPID: $ME: my_sigint_n: ARG=$ARG"
+    echo "$BASHPID: $ME: my_sigint_n: killing children"
+    local need_mock_cleanup
+    kill_descendents  $BASHPID 0 0 0
+    need_mock_cleanup=$?
+    echo "$BASHPID: $ME: my_sigint_n: waiting"
+    wait
+    echo "$BASHPID: $ME: my_sigint_n: wait complete"
+    if [ $need_mock_cleanup -ne 0 ]; then
+        umount_mock_root_as_tmpfs_cfg $ARG
+    fi
+    exit 1
+}
+
+function my_sighup_n() {
+    local ARG=$1
+    echo "$BASHPID: $ME: my_sighup_n: ARG=$ARG"
+    echo "$BASHPID: $ME: my_sighup_n: killing children"
+    local need_mock_cleanup
+    kill_descendents  $BASHPID 0 0 0
+    need_mock_cleanup=$?
+    echo "$BASHPID: $ME: my_sighup_n: waiting"
+    wait
+    echo "$BASHPID: $ME: my_sighup_n: wait complete"
+    if [ $need_mock_cleanup -ne 0 ]; then
+        umount_mock_root_as_tmpfs_cfg $ARG
+    fi
+    exit 1
+}
+
+function my_sigabrt_n() {
+    local ARG=$1
+    echo "$BASHPID: $ME: my_sigabrt_n: ARG=$ARG"
+    echo "$BASHPID: $ME: my_sigabrt_n: killing children"
+    local need_mock_cleanup
+    kill_descendents  $BASHPID 0 0 0
+    need_mock_cleanup=$?
+    echo "$BASHPID: $ME: my_sigabrt_n: waiting"
+    wait
+    echo "$BASHPID: $ME: my_sigabrt_n: wait complete"
+    if [ $need_mock_cleanup -ne 0 ]; then
+        umount_mock_root_as_tmpfs_cfg $ARG
+    fi
+    exit 1
+}
+
+function my_sigterm_n() {
+    local ARG=$1
+    echo "$BASHPID: $ME: my_sigterm_n: ARG=$ARG"
+    echo "$BASHPID: $ME: my_sigterm_n: killing children"
+    local need_mock_cleanup
+    kill_descendents  $BASHPID 0 0 0
+    need_mock_cleanup=$?
+    echo "$BASHPID: $ME: my_sigterm_n: waiting"
+    wait
+    echo "$BASHPID: $ME: my_sigterm_n: wait complete"
+    echo "$BASHPID: $ME: my_sigterm_n: need_mock_cleanup=$need_mock_cleanup"
+    if [ $need_mock_cleanup -ne 0 ]; then
+        umount_mock_root_as_tmpfs_cfg $ARG
+    fi
+    exit 1
+}
+
+function my_sigint() {
+    echo "$BASHPID: $ME: my_sigint: killing children"
+    local need_mock_cleanup
+    kill_descendents  $BASHPID 0 0 0
+    need_mock_cleanup=$?
+    echo "$BASHPID: $ME: my_sigterm_n: waiting"
+    wait
+    echo "$BASHPID: $ME: my_sigterm_n: wait complete"
+    exit 1
+}
+
+function my_sighup() {
+    echo "$BASHPID: $ME: my_sighup: killing children"
+    local need_mock_cleanup
+    kill_descendents  $BASHPID 0 0 0
+    need_mock_cleanup=$?
+    echo "$BASHPID: $ME: my_sighup: waiting"
+    wait
+    echo "$BASHPID: $ME: my_sighup: wait complete"
+    exit 1
+}
+
+function my_sigabrt() {
+    echo "$BASHPID: $ME: my_sigabrt: killing children"
+    local need_mock_cleanup
+    kill_descendents  $BASHPID 0 0 0
+    need_mock_cleanup=$?
+    echo "$BASHPID: $ME: my_sigabrt: waiting"
+    wait
+    echo "$BASHPID: $ME: my_sigabrt: wait complete"
+    exit 1
+}
+
+function my_sigterm() {
+    echo "$BASHPID: $ME: my_sigterm: killing children"
+    local need_mock_cleanup
+    kill_descendents  $BASHPID 0 0 0
+    need_mock_cleanup=$?
+    echo "$BASHPID: $ME: my_sigterm: waiting"
+    wait
+    echo "$BASHPID: $ME: my_sigterm: wait complete"
+    echo "$BASHPID: $ME: my_sigterm: need_mock_cleanup=$need_mock_cleanup"
+    exit 1
+}
+
+trapwrap() {
+    local WCMD=$1
+    shift
+    declare -i pid status=255
+    # set the trap for the foreground process
+    trap my_sigint INT
+    trap my_sighup HUP
+    trap my_sigabrt ABRT
+    trap my_sigterm TERM
+    # run the command in background
+    ### "$@" & pid=$!
+    WARGS=()
+    x=0
+    for i in "$@"; do
+        WARGS[$x]="$i"
+        x=$((x+1))
+    done
+    echo "$WCMD ${WARGS[@]/#/}"
+    $WCMD "${WARGS[@]/#/}" & pid=$!
+    # wait until bg command finishes, handling interruptions by trapped signals
+    while (( status > 128 )); do
+        wait $pid
+        status=$?
+    done
+    # restore the trap
+    trap - INT
+    trap - HUP
+    trap - ABRT
+    trap - TERM
+    # return the command exit status
+    return $status
+}
+
+trapwrap_n() {
+    local ARG=$1
+    shift
+    local WCMD=$1
+    shift
+    declare -i pid status=255
+    # set the trap for the foreground process
+    trap my_exit_n EXIT
+    trap "my_sigint_n $ARG" INT
+    trap "my_sighup_n $ARG" HUP
+    trap "my_sigabrt_n $ARG" ABRT
+    trap "my_sigterm_n $ARG" TERM
+    # run the command in background
+    WARGS=()
+    x=0
+    for i in "$@"; do
+        WARGS[$x]="$i"
+        x=$((x+1))
+    done
+    echo "$WCMD ${WARGS[@]/#/}"
+    $WCMD "${WARGS[@]/#/}" & pid=$!
+    # wait until bg command finishes, handling interruptions by trapped signals
+    while (( status > 128 )); do
+        wait $pid
+        status=$?
+    done
+    # restore the trap
+    trap - INT
+    trap - HUP
+    trap - ABRT
+    trap - TERM
+    # return the command exit status
+    return $status
+}
+
+trap my_exit EXIT
+
+mock_get_cache_dir () {
+      local CFG=$1
+      local CACHE_DIR="$MY_WORKSPACE/cache"
+      local CACHE_LINE=$(grep "config_opts[[][']cache_topdir['][]]" $CFG)
+      if [ $? -eq 0 ]; then
+         CACHE_DIR=$(echo "$CACHE_LINE" | awk -F \' '{ print $4 }')
+      fi
+      echo "$CACHE_DIR"
+}
+
+mock_get_root_dir () {
+      local CFG=$1
+      local ROOT_DIR="$MY_WORKSPACE/mock"
+      local ROOT_LINE=$(grep "config_opts[[][']root['][]]" $CFG)
+      if [ $? -eq 0 ]; then
+         ROOT_DIR="$MY_WORKSPACE/"$(echo "$ROOT_LINE" | awk -F \' '{ print $4 }')
+      fi
+      echo "$ROOT_DIR"
+}
+
+mock_clean_cfg () {
+      local CFG=$1
+      echo "${FUNCNAME[0]}: $CFG"
+      echo "=================================="
+      mock_clean_cache_cfg $CFG
+      echo "=================================="
+      echo "$MOCK -r $CFG --configdir $(dirname $CFG) --scrub=all"
+      trapwrap_n $CFG $MOCK -r $CFG --configdir $(dirname $CFG) --scrub=all
+      echo "=================================="
+      echo "$MOCK -r $CFG --configdir $(dirname $CFG) --clean"
+      trapwrap_n $CFG $MOCK -r $CFG --configdir $(dirname $CFG) --clean
+      ### Note:  this sometimes leaves behind a $MY_WORKSPACE/cache/mock/yum_cache/yumcache.lock
+      echo "=================================="
+      mock_clean_cache_all_cfg $CFG
+      echo "=================================="
+}
 mock_clean () {
-      echo "=================================="
-      remove_mock_symlinks
-      set_mock_symlinks
-      echo "=================================="
-      clean_yum_cache
-      echo "=================================="
-      echo "$MOCK -r $BUILD_CFG --scrub=root-cache --scrub=yum-cache --scrub=cache"
-      $MOCK -r $BUILD_CFG --scrub=root-cache --scrub=yum-cache --scrub=cache
-      echo "=================================="
-      echo "$MOCK -r $BUILD_CFG --scrub=all"
-      $MOCK -r $BUILD_CFG --scrub=all
-      echo "=================================="
-      echo "$MOCK -r $BUILD_CFG --clean"
-      $MOCK -r $BUILD_CFG --clean
-      ### Note:  this sometimes leavs behind a $MY_WORKSPACE/cache/mock/yum_cache/yumcache.lock
-      echo "=================================="
-      clean_yum_cache
-      echo "=================================="
-      echo "$MOCK -r $BUILD_CFG --scrub=all"
-      $MOCK -r $BUILD_CFG --scrub=all
-      echo "=================================="
-      remove_mock_symlinks
+   echo "${FUNCNAME[0]}: in"
+   echo "=================================="
+   remove_mock_symlinks $MY_BUILD_CFG
+   set_mock_symlinks $MY_BUILD_CFG
+   echo "=================================="
+   mock_clean_cfg $BUILD_CFG
+   echo "=================================="
+   remove_mock_symlinks $MY_BUILD_CFG
+   echo "${FUNCNAME[0]}: out"
+}
+
+mock_partial_clean_cfg () {
+   local CFG=$1
+   local SRPMS_LIST="$2"
+   local RPMS_LIST="$3"
+   local CMD
+   local TMP
+   local RC
+
+   echo "${FUNCNAME[0]}: CFG=$CFG  SRPMS_LIST='$SRPMS_LIST'  RPMS_LIST='$RPMS_LIST'"
+
+   TMP=$(mktemp /tmp/mock_partial_clean_cfg_XXXXXX)
+   if [ $? -ne 0 ]; then
+      echo "${FUNCNAME[0]}: mktemp failed"
+      return 1
+   fi
+
+   local ROOT_DIR=$(mock_get_root_dir $CFG)
+
+   if [ -d $ROOT_DIR/root/builddir/build/SOURCES ]; then
+      echo "rm -rf $ROOT_DIR/root/builddir/build/SOURCES/*"
+      \rm -rf $ROOT_DIR/root/builddir/build/SOURCES/* 2>> /dev/null
+   fi
+
+   if [ -d $ROOT_DIR/root/builddir/build/SPECS ]; then
+      echo "rm -rf $ROOT_DIR/root/builddir/build/SPECS/*"
+      \rm -rf $ROOT_DIR/root/builddir/build/SPECS/* 2>> /dev/null
+   fi
+
+   for s in $SRPMS_LIST; do
+      f=$(basename $s)
+      if [ -f $ROOT_DIR/root/builddir/build/SRPMS/$f ]; then
+         \rm -f -v $ROOT_DIR/root/builddir/build/SRPMS/$f 2>> /dev/null
+      fi
+      if [ -f $ROOT_DIR/root/builddir/build/originals/$f ]; then
+         \rm -f -v $ROOT_DIR/root/builddir/build/originals/$f 2>> /dev/null
+      fi
+   done
+
+   for r in $RPMS_LIST; do
+      for d in $(find $ROOT_DIR/root/builddir/build/BUILD/ -maxdepth 1 -name '$r*' 2>> /dev/null); do
+         echo "rm -rf $d"
+         \rm -rf $d 2>> /dev/null
+      done
+      if [ -d $ROOT_DIR/root/builddir/build/RPMS ]; then
+         for f in $(find $ROOT_DIR/root/builddir/build/RPMS -maxdepth 1 -name "$r*rpm" 2>> /dev/null); do
+            \rm -f -v $f 2>> /dev/null
+         done
+      fi
+   done
+
+
+   local NO_CLEAN_LIST=$(create-no-clean-list)
+   echo "NO_CLEAN_LIST=$NO_CLEAN_LIST"
+
+   local RPMS_CLEAN_LIST=""
+   local NEED_FULL_MOCK_CLEAN=0
+   for r in $RPMS_LIST; do
+       if ! str_lst_contains $r "$NO_CLEAN_LIST" ; then 
+           RPMS_CLEAN_LIST=$(join_by ' ' $RPMS_CLEAN_LIST $r)
+       else 
+           echo "Can't remove '$r' from mock environment without a wipe"; 
+           NEED_FULL_MOCK_CLEAN=1
+       fi
+   done
+
+   if [ $NEED_FULL_MOCK_CLEAN -eq 1 ]; then
+       echo "Wipe the mock environment"
+       mock_clean_cfg $CFG
+       RC=$?
+   else
+       # Intent of following is for $RPMS_LIST to be expand now while the remaining $ varaibles are for bash inside mock to expand
+       echo "Try to uninstall from the mock environment these packages: $RPMS_CLEAN_LIST"
+       CMD='LST="'$RPMS_CLEAN_LIST'";
+            DELETE_LIST=""; 
+            for r in $LST; do 
+                  FOUND=$(rpm  -q $r) ; 
+                  if [ $? -eq 0 ]; then 
+                     DELETE_LIST="$DELETE_LIST $FOUND"; 
+                  fi; 
+            done; 
+            echo "uninstalling these packages: $DELETE_LIST"; 
+            if [ "$DELETE_LIST" != "" ]; then
+                rpm  -e --nodeps $DELETE_LIST;
+            fi'
+       echo "$MOCK -r $CFG --configdir $(dirname $CFG) --chroot bash -c $CMD" &> $TMP
+       trapwrap_n $CFG $MOCK -r $CFG --configdir $(dirname $CFG) --chroot "bash -c '$CMD'" &>> $TMP
+       RC=$?
+       if [ $RC -ne 0 ]; then
+           cat $TMP
+           \rm -f $TMP
+           return $RC
+       fi
+
+       mock_clean_cache_cfg $CFG
+       RC=$?
+       \rm -f $TMP
+   fi
+
+   return $RC
+}
+
+mock_partial_clean () {
+   local SRPMS_LIST="$1"
+   local RPMS_LIST="$2"
+   echo "${FUNCNAME[0]}: in"
+   echo "${FUNCNAME[0]}: '$SRPMS_LIST'  '$RPMS_LIST'"
+   echo "=================================="
+   local NO_CLEAN_LIST=$(create-no-clean-list)
+   echo "=================================="
+   mock_partial_clean_cfg $BUILD_CFG "$SRPMS_LIST" "$RPMS_LIST"
+   echo "=================================="
+   echo "${FUNCNAME[0]}: out"
+}
+
+mock_clean_cache_cfg () {
+   local CFG=$1
+   local TMP
+   local RC
+
+   echo "${FUNCNAME[0]}: $CFG  '$SRPMS_LIST'  '$RPMS_LIST'"
+
+   TMP=$(mktemp /tmp/mock_clean_cache_cfg_XXXXXX)
+   if [ $? -ne 0 ]; then
+      echo "${FUNCNAME[0]}: mktemp failed"
+      return 1
+   fi
+
+   echo "${FUNCNAME[0]}: $CFG"
+
+   clean_yum_cache_cfg $CFG
+
+   echo "$MOCK -r $CFG --configdir $(dirname $CFG) --scrub=root-cache --scrub=yum-cache --scrub=cache" &> $TMP
+   trapwrap_n $CFG $MOCK -r $CFG --configdir $(dirname $CFG) --scrub=root-cache --scrub=yum-cache --scrub=cache &>> $TMP
+   RC=$?
+   if [ $RC -ne 0 ]; then
+      cat $TMP
+   fi
+
+   \rm -f $TPM
+   return $RC
+}
+
+mock_clean_cache () {
+   echo "${FUNCNAME[0]}: in"
+   mock_clean_cache_cfg $BUILD_CFG
+   echo "${FUNCNAME[0]}: out"
+}
+
+mock_clean_cache_all_cfg () {
+   local CFG=$1
+
+   echo "${FUNCNAME[0]}: $CFG"
+   echo "=================================="
+   clean_yum_cache_cfg $CFG
+   echo "=================================="
+   echo "$MOCK -r $CFG --configdir $(dirname $CFG) --scrub=all"
+   trapwrap_n $CFG $MOCK -r $CFG --configdir $(dirname $CFG) --scrub=all
+   echo "=================================="
+}
+
+mock_clean_cache_all () {
+   echo "${FUNCNAME[0]}: in"
+   mock_clean_cache_all_cfg $BUILD_CFG
+   echo "${FUNCNAME[0]}: out"
+}
+
+mock_clean_metadata_cfg () {
+   local CFG=$1
+   local TMP
+   local RC
+
+   echo "${FUNCNAME[0]}: $CFG"
+
+   TMP=$(mktemp /tmp/mock_partial_clean_cfg_XXXXXX)
+   if [ $? -ne 0 ]; then
+      echo "${FUNCNAME[0]}: mktemp failed"
+      return 1
+   fi
+
+   CMD=$((cat $CFG; grep config_opts\\[\'yum.conf\'\\\] $CFG | sed 's#\\n#\n#g') | grep '^[[]' | grep -v main | sed 's/[][]//g' | sed 's#^#yum --enablerepo=#' | sed 's#$# clean metadata#' | sort -u | tr '\n' ';')
+   echo "$MOCK -r $CFG --configdir $(dirname $CFG) --chroot bash -c $CMD" &> $TMP
+   trapwrap_n $CFG $MOCK -r $CFG --configdir $(dirname $CFG) --chroot "bash -c '($CMD)'" &>>$TMP
+   RC=$?
+   if [ $RC -ne 0 ]; then
+      cat $TMP
+   fi
+   \rm -f $TMP
+   return $RC
+}
+
+mock_clean_metadata () {
+   echo "${FUNCNAME[0]}: in"
+   mock_clean_metadata_cfg $BUILD_CFG
+   echo "${FUNCNAME[0]}: out"
 }
 
 update_cgcs_repo () {
@@ -410,7 +975,6 @@ update_cgcs_repo () {
           NEED_MOCK_CLEAN=1
           echo ""
           echo "Need to recreate $REPO_NAME/$d/repodata"
-          NEED_MOCK_CLEAN=1
           mkdir -p $d
           if [ -d $d/repodata ]; then
              update_repodata "$d"
@@ -425,31 +989,74 @@ update_cgcs_repo () {
       echo ""
       echo "Need to clean mock"
       mock_clean
-      set_mock_symlinks
+      set_mock_symlinks $MY_BUILD_CFG
     fi
    )
 }
 
-clean_yum_cache () {
-   local RC=0
-   YUM_CACHE_MOUNT="$MY_WORKSPACE/mock/root/var/cache/yum"
-   YUM_CACHE_LOCK="$MY_WORKSPACE/cache/mock/yum_cache/yumcache.lock"
-   echo "clean_yum_cache $YUM_CACHE_MOUNT $YUM_CACHE_LOCK"
-   mount | grep "$YUM_CACHE_MOUNT" >> /dev/null
+mock_clean_mounts_dir () {
+   local MOUNT=$1
+   local RC
+
+   if [ "$MOUNT" == "" ]; then
+      return 1
+   fi
+   mount | grep "$MOUNT" >> /dev/null
    if [ $? -eq 0 ]; then
       RC=1
       which mock_cache_umount >> /dev/null
       if [ $? -eq 0 ]; then
-         mock_cache_umount "$YUM_CACHE_MOUNT"
+         echo "umount '$MOUNT'"
+         mock_cache_umount "$MOUNT"
          if [ $? -eq 0 ]; then
             RC=0
          fi
       fi
       if [ $RC -eq 1 ]; then
-         echo "ERROR: Directory '$YUM_CACHE_MOUNT' is already mounted and will cause a build failure within mock." 
-         echo "Ask your system administrator to umount '$YUM_CACHE_MOUNT'."
+         echo "ERROR: Directory '$MOUNT' is already mounted and will cause a build failure within mock." 
+         echo "Ask your system administrator to umount '$MOUNT'."
          exit 1
       fi
+   fi
+   return 0
+}
+
+mock_clean_mounts_cfg () {
+   local CFG=$1
+   local ROOT_DIR=$(mock_get_root_dir $CFG)
+   local YUM_CACHE_MOUNT=$(readlink -f "$ROOT_DIR/root/var/cache/yum")
+   local PROC_MOUNT=$(readlink -f "$ROOT_DIR/root/proc")
+   local SYS_MOUNT=$(readlink -f "$ROOT_DIR/root/sys")
+   local SHM_MOUNT=$(readlink -f "$ROOT_DIR/root/dev/shm")
+   local PTS_MOUNT=$(readlink -f "$ROOT_DIR/root/dev/pts")
+   local MOUNT
+
+   echo "${FUNCNAME[0]}: $CFG"
+   for MOUNT in "$YUM_CACHE_MOUNT" "$PROC_MOUNT" "$SYS_MOUNT" "$SHM_MOUNT" "$PTS_MOUNT"; do
+      mock_clean_mounts_dir "$MOUNT"
+   done
+}
+
+mock_clean_mounts () {
+   echo "${FUNCNAME[0]}: in"
+   mock_clean_mounts_cfg $BUILD_CFG
+   echo "${FUNCNAME[0]}: out"
+}
+
+clean_yum_cache_cfg () {
+   local CFG=$1
+   local CACHE_DIR=$(mock_get_cache_dir $CFG)
+   local ROOT_DIR=$(mock_get_root_dir $CFG)
+   local RC=0
+
+   echo "${FUNCNAME[0]}: $CFG"
+
+   local YUM_CACHE_MOUNT=$(readlink -f "$ROOT_DIR/root/var/cache/yum")
+   local YUM_CACHE_LOCK="$CACHE_DIR/mock/yum_cache/yumcache.lock"
+   # echo "clean_yum_cache YUM_CACHE_MOUNT='$YUM_CACHE_MOUNT' YUM_CACHE_LOCK='$YUM_CACHE_LOCK'"
+   
+   if [ "$YUM_CACHE_MOUNT" != "" ]; then
+      mock_clean_mounts_dir "$YUM_CACHE_MOUNT"
    fi
 
    if [ -f "$YUM_CACHE_LOCK" ]; then
@@ -468,6 +1075,70 @@ clean_yum_cache () {
       fi
    fi
    return $RC
+}
+
+clean_yum_cache () {
+   echo "${FUNCNAME[0]}: in"
+   clean_yum_cache_cfg $BUILD_CFG
+   echo "${FUNCNAME[0]}: out"
+}
+
+mock_update_cfg () {
+   local CFG=$1
+   echo "${FUNCNAME[0]}: $CFG"
+   echo "=================================="
+   set_mock_symlinks $CFG
+   echo "$MOCK -r $CFG --configdir $(dirname $CFG) --update"
+   trapwrap_n $CFG $MOCK -r $CFG --configdir $(dirname $CFG) --update 
+   echo "=================================="
+}
+
+mock_init_cfg () {
+   local CFG=$1
+   echo "${FUNCNAME[0]}: $CFG"
+   echo "=================================="
+   set_mock_symlinks $CFG
+   echo "$MOCK -r $CFG --configdir $(dirname $CFG) --init"
+   trapwrap_n $CFG $MOCK -r $CFG --configdir $(dirname $CFG) --init
+   echo "=================================="
+}
+
+mock_update_or_init_cfg () {
+   local CFG=$1
+   local TMP
+   local RC
+   echo "${FUNCNAME[0]}: $CFG"
+   local ROOT_DIR=$(mock_get_root_dir $CFG)
+
+   TMP=$(mktemp /tmp/mock_update_or_init_cfg_XXXXXX)
+   if [ $? -ne 0 ]; then
+      echo "${FUNCNAME[0]}: mktemp failed"
+      return 1
+   fi
+   if [ -d $ROOT_DIR/root ]; then
+      echo "Updating the mock environment"
+      set_mock_symlinks $CFG
+      echo "$MOCK -r $CFG --configdir $(dirname $CFG) --update"
+      trapwrap_n $CFG $MOCK -r $CFG --configdir $(dirname $CFG) --update  &> $TMP
+      RC=$?
+   else
+      echo "Init the mock environment"
+      set_mock_symlinks $CFG
+      echo "$MOCK -r $CFG --configdir $(dirname $CFG) --init"
+      trapwrap_n $CFG $MOCK -r $CFG --configdir $(dirname $CFG) --init &> $TMP
+      RC=$?
+   fi
+   if [ $RC -ne 0 ]; then
+      cat $TMP
+   fi
+   \rm -f $TMP
+   return $RC
+}
+
+mock_update_or_init () {
+   echo "${FUNCNAME[0]}: in"
+   mock_update_or_init_cfg $BUILD_CFG
+   echo "${FUNCNAME[0]}: out"
 }
 
 if [ "x$PROJECT" == "x" ]; then
@@ -500,6 +1171,7 @@ fi
 eval set -- "$TEMP"
 
 export BUILD_TYPE=std
+trap my_exit EXIT
 
 # extract options and their arguments into variables.
 while true ; do
@@ -555,6 +1227,8 @@ export MY_MOCK_ROOT=$MY_WORKSPACE/mock/root
 
 IMAGE_INC_FILE="${MY_WORKSPACE}/image.inc"
 image_inc_list iso ${BUILD_TYPE} ${DISTRO} > "${IMAGE_INC_FILE}"
+
+LAST_PLATFORM_RELEASE_FILE="$MY_BUILD_DIR/.platform_release"
 
 TARGETS=$@
 
@@ -661,12 +1335,14 @@ fi
 
 # Create symlinks from /var/... to /localdisk/loadbuild/... if on a build server
 
-set_mock_symlinks 
+set_mock_symlinks $MY_BUILD_CFG
 
-ls $SRPM_OUT/*.src.rpm &>> /dev/null
-if [ $? -ne 0 ] && [ $CLEAN_FLAG -eq 0 ] ; then
-    echo "Nothing to build in '$SRPM_OUT'"
-    exit 0
+if [ $CLEAN_FLAG -eq 0 ]; then
+    ls $SRPM_OUT/*.src.rpm &>> /dev/null
+    if [ $? -ne 0 ]; then
+        echo "Nothing to build in '$SRPM_OUT'"
+        exit 0
+    fi
 fi
 
 ALL=0
@@ -707,29 +1383,62 @@ clean_list () {
    local p
    local r
    local s
+   local sn
    local t
+   local SPEC_DIR
 
+   echo "${FUNCNAME[0]}: '$SRPMS_LIST'  '$RPMS_LIST'  '$ALL'"
    if [ $ALL -eq 1 ]; then
        for r in $(find $RPM_DIR -name "*.rpm"); do
            \rm -f -v $r
        done
-       for d in $(find $RESULT_DIR/$USER-* -maxdepth 1 -type d); do
+
+       if [ $CLEAN_FLAG -eq 1 ]; then
+          for d in $(find $SPECS_DIR -type d); do
+             echo "rm -rf $d"
+              \rm -rf "$d" 2>> /dev/null
+          done
+       fi
+
+       for d in $(find $RESULT_DIR/$USER-* -maxdepth 1 -type d 2>> /dev/null); do
            echo "rm -rf $d"
            \rm -rf "$d" 2>> /dev/null
        done
    else
        for s in $SRPMS_LIST; do
-           for p in $(srpm_list_packages $s); do
-               for r in $(find $RESULT_DIR/$USER-* $RPM_DIR -name "$p-*.rpm"); do
+           SPEC_DIR=$(spec_cache_dir_from_srpm $s)
+           sn=$(rpm_get_name $s)
+           update_spec_cache $s
+
+           TARGET=$(rpm -qp --qf '%{NAME}-%{VERSION}\n' "$s")
+           for d in $(find $RESULT_DIR/$USER-* -maxdepth 1 -name "$TARGET*" 2>> /dev/null); do
+               echo "rm -rf $d"
+               \rm -rf "$d" 2>> /dev/null
+           done
+
+           for p in $(ls -1 $SPEC_DIR/BUILDS); do
+               for r in $(find $RESULT_DIR/$USER-* $RPM_DIR -name "$p-*.rpm" 2>> /dev/null); do
                    if [ -f $r ]; then
                        n=$(rpm_get_name $r)
                        if [ "$n" == "$p" ]; then
-                          TARGET=$(rpm -qp --qf '%{NAME}-%{VERSION}\n' "$r")
-                          for d in $(find $RESULT_DIR/$USER-* -maxdepth 1 -name "$TARGET*" 2>> /dev/null); do
-                              echo "rm -rf $d"
-                              \rm -rf "$d" 2>> /dev/null
-                          done
-    
+                          if [[ "$r" == *.src.rpm ]]; then
+                              if [ "$n" != "$sn" ]; then
+                                 continue
+                              fi
+
+                              TARGET=$(rpm -qp --qf '%{NAME}-%{VERSION}\n' "$r")
+                              for d in $(find $RESULT_DIR/$USER-* -maxdepth 1 -name "$TARGET*" 2>> /dev/null); do
+                                  echo "rm -rf $d"
+                                  \rm -rf "$d" 2>> /dev/null
+                              done
+                              
+                          else
+                              rs=$(rpm_get_srpm $r)
+                              if [[ "$rs" != "$sn"-[0-9]* ]]; then
+                                  continue
+                              fi
+                          fi
+
                           \rm -f -v $r
                        fi
                    fi
@@ -737,6 +1446,14 @@ clean_list () {
            done
     
            TARGET=$(rpm -qp --qf '%{NAME}-%{VERSION}\n' "$s")
+
+           if [ $CLEAN_FLAG -eq 1 ]; then
+               for d in $(find $SPECS_DIR -type d -name "$TARGET*" 2>> /dev/null); do
+                   echo "rm -rf $d"
+                    \rm -rf "$d" 2>> /dev/null
+               done
+           fi
+
            for d in $(find $RESULT_DIR/$USER-* -maxdepth 1 -name "$TARGET*" 2>> /dev/null); do
                echo "rm -rf $d"
                \rm -rf "$d" 2>> /dev/null
@@ -744,80 +1461,37 @@ clean_list () {
        done
    fi
 
-
-   echo "Cleaning mock environment"
-
-   if [ $ALL -eq 1 ]; then
-      if [ "x$RPM_DIR" != "x" ]; then
-          \rm -rf -v $RPM_DIR/* 2>> /dev/null
-      fi
-
-      \rm -f -v $RESULT_DIR/mockchain.log 2>> /dev/null
-      mock_clean
-   else  
-      echo "rm -rf $BUILD_BASE/mock/root/builddir/build/SOURCES/*"
-      \rm -rf $BUILD_BASE/mock/root/builddir/build/SOURCES/* 2>> /dev/null
-
-      echo "rm -rf $BUILD_BASE/mock/root/builddir/build/SOURCES/*"
-      \rm -rf $BUILD_BASE/mock/root/builddir/build/SPECS/* 2>> /dev/null
-
-      for s in $SRPMS_LIST; do
-         f=$(basename $s)
-         if [ -f $BUILD_BASE/mock/root/builddir/build/SRPMS/$f ]; then
-            \rm -f -v $BUILD_BASE/mock/root/builddir/build/SRPMS/$f 2>> /dev/null
-         fi
-         if [ -f $BUILD_BASE/mock/root/builddir/build/originals/$f ]; then
-            \rm -f -v $BUILD_BASE/mock/root/builddir/build/originals/$f 2>> /dev/null
-         fi
-      done
-
-      for r in $RPMS_LIST; do
-         for d in $(find $BUILD_BASE/mock/root/builddir/build/BUILD/ -maxdepth 1 -name '$r*' 2>> /dev/null); do
-            echo "rm -rf $d"
-            \rm -rf $d 2>> /dev/null
-         done
-         if [ -d $BUILD_BASE/mock/root/builddir/build/RPMS ]; then
-            for f in $(find $BUILD_BASE/mock/root/builddir/build/RPMS -maxdepth 1 -name "$r*rpm" 2>> /dev/null); do
-               \rm -f -v $f 2>> /dev/null
-            done
-         fi
-      done
-
-      echo "=================================="
-      echo "'rpm  -e $RPMS_LIST; exit'  | $MOCK -r $BUILD_CFG --shell"
-      echo "LIST='$RPMS_LIST'; " \
-           'DELETE_LIST=""; ' \
-           'for r in $LIST; do ' \
-           '   if [ "$r" != "kernel-headers" ] && [ "$r" != "bash" ] && [ "$r" != "centos-release" ] && [ "$r" != "openldap" ] && [ "$r" != "setup" ] && [ "$r" != "shadow-utils" ]; then ' \
-           '      FOUND=$(rpm  -q $r) ; ' \
-           '      if [ $? -eq 0 ]; then ' \
-           '         DELETE_LIST="$DELETE_LIST $FOUND"; ' \
-           '      fi; ' \
-           '   else ' \
-           '       echo "Skipping $r"; ' \
-           '   fi; ' \
-           'done; ' \
-           'echo "uninstalling these packages: $DELETE_LIST"; ' \
-           'rpm  -e --nodeps $DELETE_LIST; ' \
-           'exit'  | $MOCK -r $BUILD_CFG --shell
-      echo "====== $?" 
-
-      echo "=================================="
-      clean_yum_cache
-      echo "=================================="
-      echo "$MOCK -r $BUILD_CFG --scrub=root-cache --scrub=yum-cache --scrub=cache"
-      $MOCK -r $BUILD_CFG --scrub=root-cache --scrub=yum-cache --scrub=cache
-      echo "=================================="
-   fi
-
+   echo ""
    echo "Cleaning repodata"
    for d in $(find -L  $MY_WORKSPACE/rpmbuild $MY_WORKSPACE/results   -type d -name repodata); do
       recreate_repodata $(dirname $d)
    done
+
+   echo ""
+   echo "Cleaning mock environment"
+   echo ""
+
+   if [ $ALL -eq 1 ]; then
+       # Wipe everything
+       if [ "x$RPM_DIR" != "x" ]; then
+           \rm -rf -v $RPM_DIR/* 2>> /dev/null
+       fi
+
+       \rm -f -v $RESULT_DIR/mockchain.log 2>> /dev/null
+       mock_clean
+   else  
+       # Wipe only traces of what we built
+       mock_partial_clean "$SRPMS_LIST" "$RPMS_LIST"
+   fi
 }
 
+echo "ALL=$ALL"
 (
+trap my_exit EXIT
+trap my_sigint INT
+trap my_sighup HUP
 echo "$CMDLINE"
+echo "ALL=$ALL"
 
 if [ $CLEAN_FLAG -eq 0 ]; then
   if [ -d $RESULT_DIR ]; then
@@ -831,86 +1505,191 @@ if [ $CLEAN_FLAG -eq 0 ]; then
   fi
 fi
 
+spec_cache_dir_from_srpm () {
+   local SRPM=${1}
+   local SPEC_DIR=$(echo $SRPM | sed 's#/SRPMS/#/SPECS/#')
+   echo "$SPEC_DIR"
+}
+
+update_spec_cache () {
+   local SRPM=${1}
+   local SPEC_DIR=$(spec_cache_dir_from_srpm $SRPM)
+   local NEED_UPDATE=0
+
+   if [ ! -d $SPEC_DIR ]; then
+      mkdir -p  $SPEC_DIR
+      NEED_UPDATE=1
+   else
+      find "$SPEC_DIR" -name '*.spec' | grep 'spec' >> /dev/null
+      if [ $? -ne 0 ]; then
+         # No spec file
+         NEED_UPDATE=1
+      fi
+
+      find "$SPEC_DIR" -not -newermm "$SRPM" -name '*.spec' | grep -q 'spec'
+      if [ $? -eq 0 ]; then
+         # spec is older than src.rpm
+         NEED_UPDATE=1
+      fi
+   fi
+
+   if [ $NEED_UPDATE -ne 0 ]; then
+      (
+      cd $SPEC_DIR
+      \rm -rf BUILDS BUILDS_VR *.spec 2>> /dev/null
+      mkdir -p BUILDS
+      mkdir -p NAMES
+      mkdir -p SERVICES
+      mkdir -p BUILDS_VR
+      rpm2cpio $SRPM | cpio -civ '*.spec'
+      if [ $? -ne 0 ]; then
+         echo "ERROR: no spec file found in '$SRPM'"
+      fi
+      for f in $(find . -name '*.spec' | sort -V); do
+         touch $f
+         for p in $(spec_list_ver_rel_packages $f); do
+            touch "BUILDS_VR/$p"
+         done
+         for p in $(spec_list_packages $f); do
+            touch "BUILDS/$p"
+         done
+         for p in $(spec_find_tag Name $f 2>> /dev/null); do
+            touch "NAMES/$p"
+         done
+         for p in $(spec_find_global service $f 2>> /dev/null); do
+            touch "SERVICES/$p"
+         done
+      done
+      )
+   fi
+}
 
 # Find the list of packages we must compile
 
-for n in "${SRPM_PKG_NAMES[@]}"; do
-    r=${SRPM_PKG_NAME_TO_PATH[$n]}
-    # echo "considering $n: $r"
-    NEED_BUILD=0
+echo "Find the list of packages we must compile"
 
-    TMPDIR=$(mktemp -d /tmp/build-rpms-serial-XXXXXX)
-    cd $TMPDIR
-    rpm2cpio $r 2>> /dev/null | pax -r '*.spec' 
-    if [ $? -ne 0 ]; then
-       echo "ERROR: no spec file found in '$r'"
+NEED_BUILD_DIR=$(mktemp -d $MY_WORKSPACE/tmp/$USER-$ME-need-build-XXXXXX)
+if [ $? -ne 0 ] || [ "x$NEED_BUILD_DIR" == "x" ]; then
+    echo "Failed to create temp directory under $MY_WORKSPACE/tmp"
+    exit 1
+fi
+
+UNRESOLVED_TARGETS_DIR=$(mktemp -d $MY_WORKSPACE/tmp/$USER-$ME-unresolved-XXXXXX)
+if [ $? -ne 0 ] || [ "x$UNRESOLVED_TARGETS_DIR" == "x" ]; then
+    echo "Failed to create temp directory under $MY_WORKSPACE/tmp"
+    exit 1
+fi
+
+for n in ${UNRESOLVED_TARGETS}; do
+    touch $UNRESOLVED_TARGETS_DIR/$n
+done
+
+PLATFORM_RELEASE_CHANGED=0
+if [ -f $LAST_PLATFORM_RELEASE_FILE ]; then
+    LAST_PLATFORM_RELEASE=$(cat $LAST_PLATFORM_RELEASE_FILE)
+    if [ "$LAST_PLATFORM_RELEASE" != "$PLATFORM_RELEASE" ]; then
+        PLATFORM_RELEASE_CHANGED=1
     fi
-    cd - >> /dev/null
+else
+    PLATFORM_RELEASE_CHANGED=1
+fi
+
+for n in "${SRPM_PKG_NAMES[@]}"; do
+
+    s=${SRPM_PKG_NAME_TO_PATH[$n]}
+    SPEC_DIR=$(spec_cache_dir_from_srpm $s)
+    update_spec_cache $s
+    # echo "$BASHPID: considering $n: $s, SPEC_DIR=$SPEC_DIR"
+    NEED_BUILD=0
 
     if [ "x$TARGETS" == "x" ]; then
         # We weren't given a list of build targets.
         # Build anything missing or out of date.
         NEED_BUILD=0
+        BN=$(basename ${s//.src.rpm/})
 
-      if [ -f $RESULT_DIR/$USER-$PROJECT-$SRC_BUILD_ENVIRONMENT-$BUILD_TYPE/$(basename ${r//.src.rpm/})/fail ]; then
-            echo "Previous build of $(basename ${r//.src.rpm/}) failed"
+        if [ -f $RESULT_DIR/$MY_BUILD_ENVIRONMENT/$BN/fail ]; then
+            echo "Found: $RESULT_DIR/$MY_BUILD_ENVIRONMENT/$BN/fail"
+            echo "Previous build of $BN failed"
             NEED_BUILD=1
-      elif [ ! -f $RESULT_DIR/$USER-$PROJECT-$SRC_BUILD_ENVIRONMENT-$BUILD_TYPE/$(basename ${r//.src.rpm/})/success ]; then
-            echo "No previous build of $(basename ${r//.src.rpm/})"
+        elif [ ! -f $RESULT_DIR/$MY_BUILD_ENVIRONMENT/$BN/success ]; then
+            echo "Not Found: $RESULT_DIR/$MY_BUILD_ENVIRONMENT/$BN/success"
+            echo "No previous build of $BN"
             NEED_BUILD=1
-      else
-        LOCAL_RPMS_VRA_LIST=""
-        for f in $(find $TMPDIR -name '*.spec' | sort -V); do
-            for p in $(spec_list_ver_rel_packages $f); do
-                LOCAL_RPMS_VRA_LIST="$LOCAL_RPMS_VRA_LIST $p"
-            done
-        done
+        else
+            LOCAL_RPMS_VRA_LIST=$(ls -1 $SPEC_DIR/BUILDS_VR | tr '\n' ' ')
 
-        for f in $LOCAL_RPMS_VRA_LIST; do
-            m=$(find $RPM_DIR/$f*rpm 2>> /dev/null | wc -l)
-            if [ $m -eq 0 ] && [ -f "$UNBUILT_PATTERN_FILE" ]; then
-                echo $f | grep -f "$UNBUILT_PATTERN_FILE" >> /dev/null && m=1
-                if [ $m -eq 1 ]; then
-                   echo "Excluding '$f' due to match in UNBUILT_PATTERN_FILE '$UNBUILT_PATTERN_FILE'"
-                   if [ -f "$IMAGE_INC_FILE" ] ; then
-                      for t in $(grep -v '^#' "$IMAGE_INC_FILE"); do
-                         ii=$(echo $f | grep "^$t-[0-9]" | wc -l)
-                         if [ $ii -gt 0 ]; then
-                            echo "Including '$f' due to match in IMAGE_INC_FILE '$IMAGE_INC_FILE' due to pattern '^$t-[0-9]'"
-                            m=0
-                            break
-                         fi
-                      done
-                   fi
+            for f in $LOCAL_RPMS_VRA_LIST; do
+                m=$(find $RPM_DIR/$f*rpm 2>> /dev/null | wc -l)
+                if [ $m -eq 0 ] && [ -f "$UNBUILT_PATTERN_FILE" ]; then
+                    echo $f | grep -f "$UNBUILT_PATTERN_FILE" >> /dev/null && m=1
+                    if [ $m -eq 1 ]; then
+                       echo "Excluding '$f' due to match in UNBUILT_PATTERN_FILE '$UNBUILT_PATTERN_FILE'"
+                       if [ -f "$IMAGE_INC_FILE" ] ; then
+                          for t in $(grep -v '^#' "$IMAGE_INC_FILE"); do
+                             ii=$(echo $f | grep "^$t-[0-9]" | wc -l)
+                             if [ $ii -gt 0 ]; then
+                                echo "Including '$f' due to match in IMAGE_INC_FILE '$IMAGE_INC_FILE' due to pattern '^$t-[0-9]'"
+                                m=0
+                                break
+                             fi
+                          done
+                       fi
+                    fi
                 fi
-            fi
 
-            newer=$(find $RPM_DIR/$f*rpm -type f -not -cnewer $r 2>> /dev/null | wc -l)
-            # echo "$m  $newer=find $RPM_DIR/$f*rpm -type f -not -cnewer $r 2>> /dev/null | wc -l"
-            if [ $m -eq 0 ] || [ $newer -gt 0 ] || [ $CLEAN_FLAG -eq 1 ]; then
-                NEED_BUILD=1
-                break
-            fi
-        done
-      fi
+                newer=$(find $RPM_DIR/$f*rpm -type f -not -newermm $s 2>> /dev/null | wc -l)
+                # echo "$m  $newer=find $RPM_DIR/$f*rpm -type f -not -newermm $s 2>> /dev/null | wc -l"
+                if [ $m -eq 0 ] || [ $newer -gt 0 ] || [ $CLEAN_FLAG -eq 1 ]; then
+                    if [ $newer -gt 0 ]; then
+                        echo "Including '$f' due to newer code"
+                        find $RPM_DIR/$f*rpm -type f -not -newermm $s
+                    else
+                        if [ $m -eq 0 ]; then
+                            echo "Including '$f' due to m=0"
+                        else
+                           if [ $CLEAN_FLAG -eq 1 ]; then
+                               echo "Including '$f' due to CLEAN_FLAG=1"
+                           fi
+                        fi
+                    fi
+                    NEED_BUILD=1
+                    break
+                fi
+            done
+        fi
     else
         # We were given a list of build targets,
         # try to find packages matching that list.
         NEED_BUILD=0
-        for f in $(find $TMPDIR -name '*.spec' | sort -V); do
-            TARGET_LIST=( $TARGETS )
-            TARGET_FOUND=$(spec_match_target_list TARGET_LIST "$f" 2>> /dev/null ) 
-            if [ $? -eq 0 ]; then
-                # echo "found target '$TARGET_FOUND in '$f'"
-                NEED_BUILD=1
-                UNRESOLVED_TARGETS=$(echo "$UNRESOLVED_TARGETS" | sed "s/\(^\|[[:space:]]\)$TARGET_FOUND\([[:space:]]\|$\)/ /g")
-                break
-            fi
+        for f in $(find $SPEC_DIR/NAMES $SPEC_DIR/SERVICES $SPEC_DIR/BUILDS -type f 2>> /dev/null); do
+            b=$(basename $f)
+            for t in $TARGETS; do
+                if [[ ( "$b" == "$t" ) || ( ( "$BUILD_TYPE" == "rt" ) && ( "$b" == "$t-rt" ) ) ]]; then
+                    echo "Including named target '$f'"
+                    TARGET_FOUND=$t
+                    NEED_BUILD=1
+                    # UNRESOLVED_TARGETS=$(echo "$UNRESOLVED_TARGETS" | sed "s/\(^\|[[:space:]]\)$TARGET_FOUND\([[:space:]]\|$\)/ /g")
+                    if [ -f $UNRESOLVED_TARGETS_DIR/$TARGET_FOUND ]; then
+                        \rm -f $UNRESOLVED_TARGETS_DIR/$TARGET_FOUND
+                    fi
+                    break
+                fi
+            done
         done
     fi
 
     if [ $NO_BUILD_INFO -eq 0 ]; then
         if [ "$n" == "build-info" ]; then
+            echo "Including '$n' by default"
+            NEED_BUILD=1
+        fi
+    fi
+
+    if [ $PLATFORM_RELEASE_CHANGED -eq 1 ]; then
+        grep '%{platform_release}' $SPEC_DIR/*.spec >> /dev/null
+        if [ $? -eq 0 ]; then
+            echo "Including '$n' due to changed platform_release"
             NEED_BUILD=1
         fi
     fi
@@ -922,6 +1701,13 @@ for n in "${SRPM_PKG_NAMES[@]}"; do
 
     \rm -rf $TMPDIR
 done
+
+UNRESOLVED_TARGETS=" "
+for n in $(ls -1 $UNRESOLVED_TARGETS_DIR); do
+    UNRESOLVED_TARGETS="$UNRESOLVED_TARGETS $n"
+done
+\rm -rf $NEED_BUILD_DIR
+\rm -rf $UNRESOLVED_TARGETS_DIR
 
 ORIG_SRPMS_TO_COMPILE=( ${SRPMS_TO_COMPILE[@]} )
 
@@ -1067,29 +1853,17 @@ fi
 echo
 echo "Mapping packages to src rpm paths"
 for n in ${SRPMS_TO_COMPILE[@]}; do
-    r=${SRPM_PKG_NAME_TO_PATH[$n]}
+    s=${SRPM_PKG_NAME_TO_PATH[$n]}
+    SPEC_DIR=$(spec_cache_dir_from_srpm $s)
+    update_spec_cache $s
 
-    TMPDIR=$(mktemp -d /tmp/build-rpms-serial-XXXXXX)
-    cd $TMPDIR
-    rpm2cpio $r | pax -r '*.spec'
-    if [ $? -ne 0 ]; then
-       echo "ERROR: no spec file found in '$r'"
-    fi
-    cd - >> /dev/null
-
-    SRPMS_LIST="$SRPMS_LIST $r"
+    SRPMS_LIST="$SRPMS_LIST $s"
     # echo "SRPMS_LIST = $SRPMS_LIST"
 
-    for f in $(find $TMPDIR -name '*.spec' | sort -V); do
-        for p in $(spec_list_packages $f); do
-            RPMS_LIST="$RPMS_LIST $p"
-        done
-    done
-
-    # echo "RPMS_LIST = $RPMS_LIST"
-
-    \rm -rf $TMPDIR
+    TMP_RPMS_LIST=$(ls -1 $SPEC_DIR/BUILDS | tr '\n' ' ')
+    RPMS_LIST="$RPMS_LIST $TMP_RPMS_LIST"
 done
+echo
 
 if [ $CLEAN_FLAG -eq 0 ]; then
    update_cgcs_repo cgcs-centos-repo
@@ -1097,6 +1871,8 @@ if [ $CLEAN_FLAG -eq 0 ]; then
        update_cgcs_repo cgcs-3rd-party-repo
    fi
 fi
+
+mock_clean_mounts
 
 # clean work dirs if needed
 CLEAN_BEFORE_BUILD_SRPM_LIST=""
@@ -1108,29 +1884,12 @@ if [ $CLEAN_FLAG -eq 0 ]; then
         MUST_CLEAN=0
         contains MUST_SRPMS_TO_COMPILE $nm && MUST_CLEAN=1
 
-        r=${SRPM_PKG_NAME_TO_PATH[$nm]}
+        s=${SRPM_PKG_NAME_TO_PATH[$nm]}
+        SPEC_DIR=$(spec_cache_dir_from_srpm $s)
+        update_spec_cache $s
 
-        TMPDIR=$(mktemp -d /tmp/build-rpms-serial-XXXXXX)
-        cd $TMPDIR
-        rpm2cpio $r | pax -r '*.spec'
-        if [ $? -ne 0 ]; then
-           echo "ERROR: no spec file found in '$r'"
-        fi
-        cd - >> /dev/null
-
-        LOCAL_RPMS_LIST=""
-        for f in $(find $TMPDIR -name '*.spec' | sort -V); do
-            for p in $(spec_list_packages $f); do
-                LOCAL_RPMS_LIST="$LOCAL_RPMS_LIST $p"
-            done
-        done
-
-        LOCAL_RPMS_VRA_LIST=""
-        for f in $(find $TMPDIR -name '*.spec' | sort -V); do
-            for p in $(spec_list_ver_rel_packages $f); do
-                LOCAL_RPMS_VRA_LIST="$LOCAL_RPMS_VRA_LIST $p"
-            done
-        done
+        LOCAL_RPMS_LIST=$(ls -1 $SPEC_DIR/BUILDS | tr '\n' ' ')
+        LOCAL_RPMS_VRA_LIST=$(ls -1 $SPEC_DIR/BUILDS_VR | tr '\n' ' ')
 
         for f in $LOCAL_RPMS_VRA_LIST; do
             m=$(find $RPM_DIR/$f*rpm 2>> /dev/null | wc -l)
@@ -1138,16 +1897,14 @@ if [ $CLEAN_FLAG -eq 0 ]; then
                 echo $f | grep -f "$UNBUILT_PATTERN_FILE" >> /dev/null && m=1
             fi
 
-            n=$(find $RPM_DIR/$f*rpm -type f -not -cnewer $r 2>> /dev/null | wc -l)
-            # echo "$n=find $RPM_DIR/$f*rpm -type f -not -cnewer $r 2>> /dev/null | wc -l"
+            n=$(find $RPM_DIR/$f*rpm -type f -not -newermm $s 2>> /dev/null | wc -l)
+            # echo "$n=find $RPM_DIR/$f*rpm -type f -not -newermm $s 2>> /dev/null | wc -l"
             if [ $m -eq 0 ] || [ $n -gt 0 ] || [ $MUST_CLEAN -eq 1 ]; then
-                CLEAN_BEFORE_BUILD_SRPM_LIST="$CLEAN_BEFORE_BUILD_SRPM_LIST $r"
+                CLEAN_BEFORE_BUILD_SRPM_LIST="$CLEAN_BEFORE_BUILD_SRPM_LIST $s"
                 CLEAN_BEFORE_BUILD_RPM_LIST="$CLEAN_BEFORE_BUILD_RPM_LIST $LOCAL_RPMS_LIST"
                 break
             fi
         done
-    
-        \rm -rf $TMPDIR
     done
 fi
 
@@ -1165,22 +1922,16 @@ echo "RPMS_LIST = $RPMS_LIST"
 
 
 echo 
-if [ -d $MY_WORKSPACE/mock ]; then
-   echo "Updating the mock environment"
-   echo "=================================="
-   set_mock_symlinks 
-   echo "$MOCK -r $BUILD_CFG --update"
-   $MOCK -r $BUILD_CFG --update 
-   echo "=================================="
-else
-   echo "Init the mock environment"
-   echo "=================================="
-   set_mock_symlinks 
-   echo "$MOCK -r $BUILD_CFG --init"
-   $MOCK -r $BUILD_CFG --init
-   echo "=================================="
+if [ $CLEAN_FLAG -eq 0 ]; then
+   # pre-create these directories as $USER, 
+   # else mock will create them as root and fails to clean them.
+   # Note: keep these in sync with mockchain-parallel!
+   mkdir -p $MY_WORKSPACE/mock
+   mkdir -p $MY_WORKSPACE/cache/mock
+
+   mock_update_or_init
 fi
-set_mock_symlinks 
+set_mock_symlinks $MY_BUILD_CFG
 
 echo
 echo "Cleaning"
@@ -1204,12 +1955,6 @@ else
 fi
 
 echo
-echo "Cleaning caches"
-clean_yum_cache
-$MOCK -r $BUILD_CFG --scrub=all
-
-
-echo
 echo "Cleaning repodata"
 
 BUILD_ENVIRONMENT_DIR=$(basename $BUILD_CFG)
@@ -1227,14 +1972,17 @@ for d in $(find -L $RESULT_DIR  -type d -name repodata); do
 done
 
 echo
-echo "Building"
+echo "Cleaning Metadata"
 
 MOCKCHAIN_LOG="$RESULT_DIR/mockchain.log"
 mkdir -p $RESULT_DIR
 touch $RESULT_DIR/build_start
 \rm -rf $MOCKCHAIN_LOG
 
-(grep '^[[]' $BUILD_CFG | grep -v main | sed 's/[][]//g' | sed 's#^#yum --enablerepo=#' | sed 's#$# clean metadata#'; echo "exit") | $MOCK -r $BUILD_CFG --shell
+mock_clean_metadata
+
+echo
+echo "Building"
 
 CMD_PREFIX=""
 if [ -x /bin/ionice ]; then
@@ -1248,10 +1996,12 @@ fi
 echo "CAREFUL=$CAREFUL"
 echo "CMD_OPTIONS=$CMD_OPTIONS"
 
-CMD="$CMD_PREFIX mockchain -r $BUILD_CFG -l $BUILD_BASE --recurse --log=$MOCKCHAIN_LOG --tmp_prefix=$USER --addrepo=$LOCAL_URL --addrepo=$LOCAL_SRC_URL -m --rootdir=$BUILD_BASE/mock/root $CMD_OPTIONS -m --rebuild $SRPMS_LIST -m --define='_tis_dist .tis' -m --define='platform_release $PLATFORM_RELEASE'"
-echo "$CMD" 
-eval stdbuf -o0 $CMD 
+CMD="$CMD_PREFIX mockchain -r $BUILD_CFG -l $BUILD_BASE --recurse --log=$MOCKCHAIN_LOG --tmp_prefix=$USER --addrepo=$LOCAL_URL --addrepo=$LOCAL_SRC_URL -m --rootdir=$BUILD_BASE/mock/root $CMD_OPTIONS -m --rebuild $SRPMS_LIST"
+echo "$CMD -m --define='_tis_dist .tis' -m --define='platform_release $PLATFORM_RELEASE'" 
+trapwrap stdbuf -o0 $CMD -m --define='_tis_dist .tis' -m --define='platform_release $PLATFORM_RELEASE'
 MOCKCHAIN_RC=$?
+
+echo $PLATFORM_RELEASE > $LAST_PLATFORM_RELEASE_FILE
 
 for d in $(find $RESULT_DIR -name '*.rpm' | grep -v '[.]src[.]rpm' | xargs --max-args=1 dirname | sort -u); do
     rsync -u $d/*.rpm $RPM_DIR 
@@ -1301,7 +2051,7 @@ if [ -f $MOCKCHAIN_LOG ]; then
     grep 'following pkgs could not be successfully built' $MOCKCHAIN_LOG >> /dev/null
     if [ $? -eq 0 ]; then
         FAILED_PKGS=""
-        for p in $(sed -n '/following pkgs could not be successfully built:/,/Results out to/p' $MOCKCHAIN_LOG   | sed 1d | sed '$ d'); do
+        for p in $(sed -n '/following pkgs could not be successfully built:/,/Results out to/p' $MOCKCHAIN_LOG | grep -v '*** Build Failed ***'  | sed 1d | sed '$ d' | cut -d ':' -f2-); do
             PKG=$(basename $p)
             FAILED_PKGS="$PKG  $FAILED_PKGS"
         done
@@ -1331,7 +2081,7 @@ if [ 0$FORMAL_BUILD -eq 1 ] && [ "$USER" == "jenkins" ]; then
 
 		MY_WORKSPACE=$MY_WORKSPACE_TOP ${SIGN_SECURE_BOOT} > $MY_WORKSPACE_TOP/export/${SIGN_SECURE_BOOT_LOG} 2>&1
 		if [ $? -ne 0 ]; then
-			echo "Signing of packages failed -- see $MY_WORKSPACE_TOP/export/${SIGN_SECURE_BOOT_LOG}.log"
+			echo "Signing of packages failed -- see $MY_WORKSPACE_TOP/export/${SIGN_SECURE_BOOT_LOG}"
 			exit 1
 		fi
 	fi
