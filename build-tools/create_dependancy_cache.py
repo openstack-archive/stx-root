@@ -111,7 +111,7 @@ if options.third_party_repo_dir:
 # Create directory if required
 if not os.path.isdir(publish_cache_dir):
     print("Creating directory: %s" % publish_cache_dir)
-    os.makedirs(publish_cache_dir, 0755)
+    os.makedirs(publish_cache_dir, 0o755)
 
 # The Main data structure
 pkg_data={}
