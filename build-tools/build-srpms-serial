@@ -1133,11 +1133,12 @@ for GIT_ROOT in $GIT_LIST; do
    done
 done
 
+mkdir -p $MY_WORKSPACE/tmp
 # Try to find and clean orphaned and discontinued .src.rpm's 
 if [ $ALL -eq 1 ]; then
     echo
     echo "Auditing for obsolete srpms"
-    PACKAGES_CONSIDERED=""
+    AUDIT_DIR=$(mktemp -d $MY_WORKSPACE/tmp/$USER-$ME-audit-XXXXXX)
     for GIT_ROOT in $GIT_LIST; do
         for p in $(cat $GIT_ROOT/$PKG_DIRS_FILE 2>> /dev/null); do
             src_dir="$GIT_ROOT/$p"
@@ -1147,7 +1148,7 @@ if [ $ALL -eq 1 ]; then
                     for f in $(find $src_dir/${DISTRO} -name '*.spec' | sort -V); do
                         NAME=$(spec_find_tag Name "$f" 2>> /dev/null)
                         if [ $? -eq 0 ]; then
-                            PACKAGES_CONSIDERED="$PACKAGES_CONSIDERED $NAME"
+                            touch "$AUDIT_DIR/$NAME"
                         fi
                     done
                     if [ -f $src_dir/$SRPM_LIST_PATH ]; then
@@ -1181,7 +1182,7 @@ if [ $ALL -eq 1 ]; then
                            if [ -f $ORIG_SRPM_PATH ]; then
                                NAME=$(rpm -q --queryformat '%{NAME}\n' -p $ORIG_SRPM_PATH 2>> /dev/null)
                                if [ $? -eq 0 ]; then
-                                   PACKAGES_CONSIDERED="$PACKAGES_CONSIDERED $NAME"
+                                   touch "$AUDIT_DIR/$NAME"
                                fi
                            fi
                         done
@@ -1216,6 +1217,8 @@ if [ $ALL -eq 1 ]; then
             fi
         fi
     done
+    echo "Delete $AUDIT_DIR"
+    \rm -rf "$AUDIT_DIR"
 fi
 
 if [ $CLEAN_FLAG -eq 1 ]; then
