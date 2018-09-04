@@ -124,7 +124,7 @@ create-no-clean-list () {
    else
        if [ -f MY_BUILD_CFG ]; then
            if [ -f MY_BUILD_CFG ]; then
-               find "$MY_BUILD_CFG" -not -newer "$NO_CLEAN_LIST_FILE" | grep $(basename $MY_BUILD_CFG) >> /dev/null
+               find "$MY_BUILD_CFG" -not -newermm "$NO_CLEAN_LIST_FILE" | grep -q $(basename $MY_BUILD_CFG)
                if [ $? -eq 0 ]; then
                    NEED_REBUILD=1
                fi
@@ -930,7 +930,6 @@ mock_clean () {
       ( mock_clean_cfg $SUB_CFG 2>&1 | sed "s#^#${PREFIX}: #" ; exit ${PIPESTATUS[0]} ) &
    done
    wait
-   # mock_clean_cfg $BUILD_CFG
    echo "=================================="
    remove_mock_symlinks $MY_BUILD_CFG
    echo "${FUNCNAME[0]}: out"
@@ -1050,7 +1049,6 @@ mock_partial_clean () {
       ( mock_partial_clean_cfg $SUB_CFG "$SRPMS_LIST" "$RPMS_LIST" 2>&1 | sed "s#^#${PREFIX}: #" ; exit ${PIPESTATUS[0]} ) &
    done
    wait
-   # mock_partial_clean_cfg $BUILD_CFG "$SRPMS_LIST" "$RPMS_LIST"
    echo "=================================="
    echo "${FUNCNAME[0]}: out"
 }
@@ -1113,7 +1111,6 @@ mock_clean_cache_all () {
       ( mock_clean_cache_all_cfg $SUB_CFG 2>&1 | sed "s#^#${PREFIX}: #" ; exit ${PIPESTATUS[0]} ) &
    done
    wait
-   # mock_clean_cache_all_cfg $BUILD_CFG
    echo "${FUNCNAME[0]}: out"
 }
 
@@ -1263,7 +1260,6 @@ mock_clean_mounts () {
       ( mock_clean_mounts_cfg $SUB_CFG 2>&1 | sed "s#^#${PREFIX}: #" ; exit ${PIPESTATUS[0]} ) &
    done
    wait
-   # mock_clean_mounts_cfg $BUILD_CFG
    echo "${FUNCNAME[0]}: out"
 }
 
@@ -1309,7 +1305,6 @@ clean_yum_cache () {
       ( clean_yum_cache_cfg $SUB_CFG 2>&1 | sed "s#^#${PREFIX}: #" ; exit ${PIPESTATUS[0]} ) &
    done
    wait
-   # clean_yum_cache_cfg $BUILD_CFG
    echo "${FUNCNAME[0]}: out"
 }
 
@@ -1372,7 +1367,6 @@ mock_update_or_init () {
       ( mock_update_or_init_cfg $SUB_CFG 2>&1 | sed "s#^#${PREFIX}: #" ; exit ${PIPESTATUS[0]} ) &
    done
    wait 
-   # mock_update_or_init_cfg $BUILD_CFG
    echo "${FUNCNAME[0]}: out"
 }
 
@@ -1396,7 +1390,7 @@ FORMAL_FLAG=0
 CAREFUL=0
    
 # read the options
-TEMP=$(getopt -o ha::bc: --long std,rt,installer,no-required,no-descendants,no-autoclean,no-build-info,clean,tmpfs-clean,formal,careful,help,arga::,argb,argc: -n "$ME" -- "$@")
+TEMP=$(getopt -o ha::bc: --long parallel,std,rt,installer,no-required,no-descendants,no-autoclean,no-build-info,clean,tmpfs-clean,formal,careful,help,arga::,argb,argc: -n "$ME" -- "$@")
 
 if [ $? -ne 0 ]; then
     usage
@@ -1434,6 +1428,7 @@ while true ; do
                 "") shift 2 ;;
                 *) ARG_C=$2 ; shift 2 ;;
             esac ;;
+        --parallel) shift ;;
         --) shift ; break ;;
         *) echo "Internal error!" ; exit 1 ;;
     esac
@@ -1764,8 +1759,15 @@ update_spec_cache () {
       mkdir -p  $SPEC_DIR
       NEED_UPDATE=1
    else
-      find "$SPEC_DIR" -not -newer "$SRPM" -name '*.spec' | grep 'spec' >> /dev/null
+      find "$SPEC_DIR" -name '*.spec' | grep 'spec' >> /dev/null
+      if [ $? -ne 0 ]; then
+         # No spec file
+         NEED_UPDATE=1
+      fi
+
+      find "$SPEC_DIR" -not -newermm "$SRPM" -name '*.spec' | grep -q 'spec'
       if [ $? -eq 0 ]; then
+         # spec is older than src.rpm
          NEED_UPDATE=1
       fi
    fi
@@ -1778,7 +1780,7 @@ update_spec_cache () {
       mkdir -p NAMES
       mkdir -p SERVICES
       mkdir -p BUILDS_VR
-      rpm2cpio $SRPM | pax -r '*.spec'
+      rpm2cpio $SRPM | cpio -civ '*.spec'
       if [ $? -ne 0 ]; then
          echo "ERROR: no spec file found in '$SRPM'"
       fi
@@ -1843,12 +1845,15 @@ for n in "${SRPM_PKG_NAMES[@]}"; do
         # We weren't given a list of build targets.
         # Build anything missing or out of date.
         NEED_BUILD=0
+        BN=$(basename ${s//.src.rpm/})
 
-        if [ -f $RESULT_DIR/$USER-$PROJECT-$SRC_BUILD_ENVIRONMENT-$BUILD_TYPE/$(basename ${s//.src.rpm/})/fail ]; then
-            echo "Previous build of $(basename ${s//.src.rpm/}) failed"
+        if [ -f $RESULT_DIR/$MY_BUILD_ENVIRONMENT/$BN/fail ]; then
+            echo "Found: $RESULT_DIR/$MY_BUILD_ENVIRONMENT/$BN/fail"
+            echo "Previous build of $BN failed"
             NEED_BUILD=1
-        elif [ ! -f $RESULT_DIR/$USER-$PROJECT-$SRC_BUILD_ENVIRONMENT-$BUILD_TYPE/$(basename ${s//.src.rpm/})/success ]; then
-            echo "No previous build of $(basename ${s//.src.rpm/})"
+        elif [ ! -f $RESULT_DIR/$MY_BUILD_ENVIRONMENT/$BN/success ]; then
+            echo "Not Found: $RESULT_DIR/$MY_BUILD_ENVIRONMENT/$BN/success"
+            echo "No previous build of $BN"
             NEED_BUILD=1
         else
             LOCAL_RPMS_VRA_LIST=$(ls -1 $SPEC_DIR/BUILDS_VR | tr '\n' ' ')
@@ -1872,12 +1877,12 @@ for n in "${SRPM_PKG_NAMES[@]}"; do
                     fi
                 fi
 
-                newer=$(find $RPM_DIR/$f*rpm -type f -not -cnewer $s 2>> /dev/null | wc -l)
-                # echo "$m  $newer=find $RPM_DIR/$f*rpm -type f -not -cnewer $s 2>> /dev/null | wc -l"
+                newer=$(find $RPM_DIR/$f*rpm -type f -not -newermm $s 2>> /dev/null | wc -l)
+                # echo "$m  $newer=find $RPM_DIR/$f*rpm -type f -not -newermm $s 2>> /dev/null | wc -l"
                 if [ $m -eq 0 ] || [ $newer -gt 0 ] || [ $CLEAN_FLAG -eq 1 ]; then
                     if [ $newer -gt 0 ]; then
                         echo "Including '$f' due to newer code"
-                        find $RPM_DIR/$f*rpm -type f -not -cnewer $s
+                        find $RPM_DIR/$f*rpm -type f -not -newermm $s
                     else
                         if [ $m -eq 0 ]; then
                             echo "Including '$f' due to m=0"
@@ -2129,8 +2134,8 @@ if [ $CLEAN_FLAG -eq 0 ]; then
                 echo $f | grep -f "$UNBUILT_PATTERN_FILE" >> /dev/null && m=1
             fi
 
-            n=$(find $RPM_DIR/$f*rpm -type f -not -cnewer $s 2>> /dev/null | wc -l)
-            # echo "$n=find $RPM_DIR/$f*rpm -type f -not -cnewer $s 2>> /dev/null | wc -l"
+            n=$(find $RPM_DIR/$f*rpm -type f -not -newermm $s 2>> /dev/null | wc -l)
+            # echo "$n=find $RPM_DIR/$f*rpm -type f -not -newermm $s 2>> /dev/null | wc -l"
             if [ $m -eq 0 ] || [ $n -gt 0 ] || [ $MUST_CLEAN -eq 1 ]; then
                 CLEAN_BEFORE_BUILD_SRPM_LIST="$CLEAN_BEFORE_BUILD_SRPM_LIST $s"
                 CLEAN_BEFORE_BUILD_RPM_LIST="$CLEAN_BEFORE_BUILD_RPM_LIST $LOCAL_RPMS_LIST"

@@ -59,6 +59,19 @@ usage () {
     echo ""
 }
 
+
+spec_cache_dir_from_srpm () {
+   local SRPM=${1}
+   local SPEC_DIR=$(echo $SRPM | sed 's#/SRPMS/#/SPECS/#')
+   echo "$SPEC_DIR"
+}
+
+result_dir_from_srpm () {
+   local SRPM=$(basename ${1} | sed 's#.src.rpm$##')
+   local RESULT_DIR="$MY_WORKSPACE/results/$MY_BUILD_ENVIRONMENT/$SRPM"
+   echo "$RESULT_DIR"
+}
+
 # This function creates a bunch of subdirs in $MY_WORKSPACE and makes sure
 # that a $MY_BUILD_CFG file exists.
 #
@@ -365,7 +378,7 @@ build_dir () {
          else
              echo "ERROR: $FUNCNAME (${LINENO}): Invalid srpm path '$p', evaluated as '$ORIG_SRPM_PATH', found in '$PKG_BASE/$SRPM_LIST_PATH'"
              ORIG_SRPM_PATH=""
-             exit 1
+             return 3
          fi 
       done
    fi
@@ -417,12 +430,17 @@ build_dir () {
 
 clean_srpm_dir () {
    local DIR=$1
+   local EXCLUDE_MD5=$2
    local SRPM_PATH
    local SRPM_FILE
    local SRPM_OUT_PATH
    local SRPM_NAME
    local SRPM_OUT_NAME
    local INPUTS_TO_CLEAN=""
+
+   if [ $EXCLUDE_MD5 == "" ]; then
+       EXCLUDE_MD5=0
+   fi
 
    echo "clean_srpm_dir DIR=$DIR"
 
@@ -441,6 +459,16 @@ clean_srpm_dir () {
            \rm -rf $SRPM_ASSEMBLE/$SRPM_NAME
        fi
 
+       if [ -d $SOURCE_OUT/$SRPM_FILE ]; then
+           echo "rm -rf $SOURCE_OUT/$SRPM_FILE"
+           \rm -rf $SOURCE_OUT/$SRPM_FILE
+       fi
+
+       if [ $EXCLUDE_MD5 -eq 0 ] && [ -d $SOURCE_OUT/$SRPM_NAME ]; then
+           echo "rm -rf $SOURCE_OUT/$SRPM_NAME"
+           \rm -rf $SOURCE_OUT/$SRPM_NAME
+       fi
+
        local d
        local src_d
        local spec
@@ -457,17 +485,24 @@ clean_srpm_dir () {
            done
        done
 
+       # Look for older versions of the same src rpm that also need cleaning
        for SRPM_OUT_PATH in $(ls -1 $SRPM_OUT/$SRPM_NAME*.src.rpm 2>> /dev/null); do
+           SRPM_OUT_FILE=$(basename $SRPM_OUT_PATH)
            SRPM_OUT_NAME=$(rpm -q --queryformat '%{NAME}\n' -p $SRPM_OUT_PATH 2>> /dev/null)
            if [ "$SRPM_NAME" == "$SRPM_OUT_NAME" ]; then
               \rm -fv $SRPM_OUT_PATH
+              if [ -d $SOURCE_OUT/$SRPM_OUT_FILE ]; then
+                  echo "rm -rf $SOURCE_OUT/$SRPM_OUT_FILE"
+                  \rm -rf $SOURCE_OUT/$SRPM_OUT_FILE
+              fi
+
            fi
        done
    done
 
    if [ "x$INPUTS_TO_CLEAN" != "x" ]; then
        for d in $INPUTS_TO_CLEAN; do
-           if [ -d $d ]; then
+           if [ -d $d/rpmbuild ]; then
                echo "rm -rf $d"
                \rm -rf $d
            fi
@@ -523,7 +558,7 @@ build_dir_srpm () {
       echo "===== Cleaning '$TARGET_FOUND' ====="
 
       if [ -d $SRPM_DIR ] && [ $EDIT_FLAG -eq 0 ]; then
-         clean_srpm_dir "$SRPM_DIR"
+         clean_srpm_dir "$SRPM_DIR" 0
       fi
 
       if [ -d $PKG_ROOT_DIR ]; then
@@ -564,53 +599,69 @@ build_dir_srpm () {
           fi
       fi
 
-      local BUILD_NEEDED=2
+      #
+      # Capture md5 data for all input files
+      #
+      local TARGET_SOURCES_DIR="$SOURCES_DIR/$TARGET_FOUND"
+      local INPUT_FILES="$TARGET_SOURCES_DIR/srpm_input.files"
+      local INPUT_FILES_SORTED="$TARGET_SOURCES_DIR/srpm_sorted_input.files"
+      local INPUT_FILES_MD5="$TARGET_SOURCES_DIR/srpm_input.md5"
+      local REFERENCE_MD5="$TARGET_SOURCES_DIR/srpm_reference.md5"
+
+      mkdir -p "$TARGET_SOURCES_DIR"
+      find $PKG_BASE -type f > $INPUT_FILES
+      find $ORIG_SRPM_PATH -type f >> $INPUT_FILES
+         (
+         cd $PKG_BASE
+         if [ "x$COPY_LIST" != "x" ]; then
+            find $COPY_LIST -type f >> $INPUT_FILES
+         fi
+         )
+      cat $INPUT_FILES | xargs readlink -f | sort --unique > $INPUT_FILES_SORTED
+      \rm -f $INPUT_FILES
+      cat $INPUT_FILES_SORTED | xargs md5sum | sed "s# $(readlink -f $MY_REPO)/# #" > $INPUT_FILES_MD5
+      \rm -f $INPUT_FILES_SORTED
+      echo "Wrote: $INPUT_FILES_MD5"
+
+      #
+      # Is a rebuild required?
+      # Compare md5 of current inputs vs md5 of previous build?
+      #
+      local BUILD_NEEDED=0
       local SRPM_OUT_PATH2
+      local DIFF_LINE
+      local DIFF_FILE
 
-      for SRPM_PATH in $(find "$FULL_BUILD_DIR/SRPMS" -name '*.src.rpm' | sort -V); do
-         if [ $BUILD_NEEDED -eq 2 ]; then
-            BUILD_NEEDED=0
-         fi
 
-         b=$(basename $SRPM_PATH)
-         SRPM_OUT_PATH2=$(find $SRPM_OUT -name $b)
-         if [ "x$SRPM_OUT_PATH2" == "x" ]; then
+      if [ -f $REFERENCE_MD5 ]; then
+         DIFF_LINE=$(diff "$INPUT_FILES_MD5" "$REFERENCE_MD5" | head -n 2 | tail -n 1; exit ${PIPESTATUS[0]})
+         if [ $? -ne 0 ]; then
+            DIFF_FILE=$(echo "$DIFF_LINE" | cut -d ' ' -f4-)
             BUILD_NEEDED=1
+            case ${DIFF_LINE:0:1} in
+               '>') echo "Rebuild required due to deleted file: $DIFF_FILE" ;;
+               '<') echo "Rebuild required due to new or changed file: $DIFF_FILE" ;;
+               *)  echo "Rebuild required due to diff: $DIFF_LINE" ;;
+            esac
          fi
-         
-         n=$(find $PKG_BASE -type f -cnewer $SRPM_PATH | wc -l)
-         if [ $n -gt 0 ]; then
-            BUILD_NEEDED=1
-         fi
+      else
+         echo "Rebuild required due to missing reference md5: $REFERENCE_MD5"
+         BUILD_NEEDED=1
+      fi
 
-         n=$(find $ORIG_SRPM_PATH -type f -cnewer $SRPM_PATH | wc -l)
-         if [ $n -gt 0 ]; then
-            BUILD_NEEDED=1
-         fi
-
-         if [ -f $PKG_BASE/$DATA ]; then
-            (
-            cd $PKG_BASE
-            BUILD_NEEDED=0
-
-            # NOTE: SRC_DIR is not honored in this build path
-
-            if [ "x$COPY_LIST" != "x" ]; then
-               n=$(find $COPY_LIST -type f -cnewer $SRPM_PATH | wc -l)
-               if [ $n -gt 0 ]; then
-                  BUILD_NEEDED=1
-               fi
-            fi
-
-            # NOTE: COPY_LIST_TO_TAR is not honored in this build path
-
-            exit $BUILD_NEEDED
-            )
-            if [ $? -gt 0 ]; then
+      if [ -d "$FULL_BUILD_DIR/SRPMS" ]; then
+         for SRPM_PATH in $(find "$FULL_BUILD_DIR/SRPMS" -name '*.src.rpm' | sort -V); do
+            b=$(basename $SRPM_PATH)
+            SRPM_OUT_PATH2=$(find $SRPM_OUT -name $b)
+            if [ "x$SRPM_OUT_PATH2" == "x" ]; then
+               echo "Rebuild required due to missing srpm: $b"
                BUILD_NEEDED=1
             fi
-         fi
-      done
+         done
+      else
+         echo "Rebuild required due to missing directory: '$FULL_BUILD_DIR/SRPMS'"
+         BUILD_NEEDED=1
+      fi
    
       if [ $BUILD_NEEDED -eq 0 ]; then
          echo "SRPM build not required for '$PKG_BASE'"
@@ -620,7 +671,7 @@ build_dir_srpm () {
       fi
    
       if [ $EDIT_FLAG -eq 0 ]; then
-         clean_srpm_dir "$FULL_BUILD_DIR/SRPMS"
+         clean_srpm_dir "$FULL_BUILD_DIR/SRPMS" 1
 
          if [ -d $PKG_ROOT_DIR ]; then
             echo "rm -rf $PKG_ROOT_DIR"
@@ -700,7 +751,7 @@ build_dir_srpm () {
             \cp -L -r -f -v $p $FULL_BUILD_DIR/SOURCES
             if [ $? -ne 0 ]; then
                echo "ERROR: $FUNCNAME (${LINENO}): COPY_LIST: file not found: '$p'"
-               exit 1
+               return 1
             fi
          done
       fi
@@ -736,6 +787,24 @@ build_dir_srpm () {
              if [ -f $SLOW_FLAG_FILE ]; then
                  \rm -f $SLOW_FLAG_FILE
              fi
+         fi
+
+         \rm -f -v "$REFERENCE_MD5"
+         \mv -v "$INPUT_FILES_MD5" "$REFERENCE_MD5"
+
+         local SPEC_DIR=$(spec_cache_dir_from_srpm $SRPM_OUT/$ss)
+         if [ -d $SPEC_DIR/BUILDS_VR ]; then
+            for f in $(ls -1 $SPEC_DIR/BUILDS_VR); do
+                for r in $(find  $RPM_DIR -name "$f*rpm" 2>> /dev/null); do
+                   \rm -f -v $r
+                done
+            done
+         fi
+
+         local RESULT_DIR=$(result_dir_from_srpm $SRPM_OUT/$ss)
+         if [ -d $RESULT_DIR ]; then
+             echo "rm -rf $RESULT_DIR"
+             \rm -rf $RESULT_DIR
          fi
       done
 
@@ -807,7 +876,7 @@ build_dir_spec () {
          # clean
          echo "===== Cleaning '$TARGET_FOUND' ====="
          if [ -d $SRPM_PATH ] && [ $EDIT_FLAG -eq 0 ]; then
-            clean_srpm_dir $SRPM_PATH
+            clean_srpm_dir $SRPM_PATH 0
          fi
 
          if [ -d $PKG_ROOT_DIR ]; then
@@ -830,9 +899,6 @@ build_dir_spec () {
             fi
          fi
    
-         local BUILD_NEEDED=2
-         local SRPM_OUT_PATH2
-
          #
          # Load data from build_srpm.data
          #
@@ -852,56 +918,82 @@ build_dir_spec () {
              fi
          fi
 
-         for SRPM_PATH2 in $(find "$RPMBUILD_BASE/SRPMS" -name '*.src.rpm' | sort -V); do
-            if [ $BUILD_NEEDED -eq 2 ]; then
-               BUILD_NEEDED=0
+         #
+         # Capture md5 data for all input files
+         #
+         local TARGET_SOURCES_DIR="$SOURCES_DIR/$TARGET_FOUND"
+         local INPUT_FILES="$TARGET_SOURCES_DIR/srpm_input.files"
+         local INPUT_FILES_SORTED="$TARGET_SOURCES_DIR/srpm_sorted_input.files"
+         local INPUT_FILES_MD5="$TARGET_SOURCES_DIR/srpm_input.md5"
+         local REFERENCE_MD5="$TARGET_SOURCES_DIR/srpm_reference.md5"
+
+         mkdir -p "$TARGET_SOURCES_DIR"
+         find $PKG_BASE -type f > $INPUT_FILES
+         find $ORIG_SRPM_PATH -type f >> $INPUT_FILES
+            (
+            cd $PKG_BASE
+            if [ "x$SRC_DIR" != "x" ]; then
+               if [ -d "$SRC_DIR" ]; then
+                  find $SRC_DIR -type f | grep -v '[/][.]git$' | grep -v '[/][.]git[/]' >> $INPUT_FILES
+               fi
             fi
 
-            b=$(basename $SRPM_PATH2)
-            SRPM_OUT_PATH2=$(find $SRPM_OUT -name $b)
-            if [ "x$SRPM_OUT_PATH2" == "x" ]; then
+            if [ "x$COPY_LIST" != "x" ]; then
+               find $COPY_LIST -type f >> $INPUT_FILES
+            fi
+
+            if [ "x$COPY_LIST_TO_TAR" != "x" ]; then
+               find $COPY_LIST_TO_TAR -type f >> $INPUT_FILES
+            fi
+
+            if [ "x$OPT_DEP_LIST" != "x" ]; then
+               find $OPT_DEP_LIST -type f >> $INPUT_FILES 2> /dev/null
+            fi
+            )
+         cat $INPUT_FILES | xargs readlink -f | sort --unique > $INPUT_FILES_SORTED
+         \rm -f $INPUT_FILES
+         cat $INPUT_FILES_SORTED | xargs md5sum | sed "s# $(readlink -f $MY_REPO)/# #" > $INPUT_FILES_MD5
+         \rm -f $INPUT_FILES_SORTED
+         echo "Wrote: $INPUT_FILES_MD5"
+
+         #
+         # Is a rebuild required?
+         # Compare md5 of current inputs vs md5 of previous build?
+         #
+         local BUILD_NEEDED=0
+         local SRPM_OUT_PATH2
+         local DIFF_LINE
+         local DIFF_FILE
+
+         if [ -f $REFERENCE_MD5 ]; then
+            DIFF_LINE=$(diff "$INPUT_FILES_MD5" "$REFERENCE_MD5" | head -n 2 | tail -n 1; exit ${PIPESTATUS[0]})
+            if [ $? -ne 0 ]; then
+               DIFF_FILE=$(echo "$DIFF_LINE" | cut -d ' ' -f4-)
                BUILD_NEEDED=1
+               case ${DIFF_LINE:0:1} in
+                  '>') echo "Rebuild required due to deleted file: $DIFF_FILE" ;;
+                  '<') echo "Rebuild required due to new or changed file: $DIFF_FILE" ;;
+                  *)  echo "Rebuild required due to diff: $DIFF_LINE" ;;
+               esac
             fi
+         else
+            echo "Rebuild required due to missing reference md5: $REFERENCE_MD5"
+            BUILD_NEEDED=1
+         fi
 
-            n=$(find $PKG_BASE -type f -cnewer $SRPM_PATH2 | wc -l)
-            if [ $n -gt 0 ]; then
-               BUILD_NEEDED=1
-            fi
-
-            if [ -f $PKG_BASE/$DATA ]; then
-               (
-               cd $PKG_BASE
-               BUILD_NEEDED=0
-               if [ "x$SRC_DIR" != "x" ]; then
-                  if [ -d "$SRC_DIR" ]; then
-                     n=$(find $SRC_DIR -type f -cnewer $SRPM_PATH2 | grep -v '[/][.]git$' | grep -v '[/][.]git[/]' | wc -l)
-                     if [ $n -gt 0 ]; then
-                        BUILD_NEEDED=1
-                     fi
-                  fi
-               fi
-
-               if [ "x$COPY_LIST" != "x" ]; then
-                  n=$(find $COPY_LIST -type f -cnewer $SRPM_PATH2 | wc -l)
-                  if [ $n -gt 0 ]; then
-                     BUILD_NEEDED=1
-                  fi
-               fi
-
-               if [ "x$COPY_LIST_TO_TAR" != "x" ]; then
-                  n=$(find $COPY_LIST_TO_TAR -type f -cnewer $SRPM_PATH2 | wc -l)
-                  if [ $n -gt 0 ]; then
-                     BUILD_NEEDED=1
-                  fi
-               fi
-
-               exit $BUILD_NEEDED
-               )
-               if [ $? -gt 0 ]; then
+         if [ -d "$FULL_BUILD_DIR/SRPMS" ]; then
+            for SRPM_PATH2 in $(find "$RPMBUILD_BASE/SRPMS" -name '*.src.rpm' | sort -V); do
+               b=$(basename $SRPM_PATH2)
+               SRPM_OUT_PATH2=$(find $SRPM_OUT -name $b)
+               if [ "x$SRPM_OUT_PATH2" == "x" ]; then
+                  echo "Rebuild required due to missing srpm: $b"
                   BUILD_NEEDED=1
                fi
-            fi
-         done
+            done
+         else
+            echo "Rebuild required due to missing directory: '$FULL_BUILD_DIR/SRPMS'"
+            BUILD_NEEDED=1
+         fi
    
          if [ $EDIT_FLAG -eq 1 ]; then
 
@@ -944,7 +1036,7 @@ build_dir_spec () {
          echo "DATA=$DATA"
    
          if [ -d "$RPMBUILD_BASE/SRPMS" ]; then
-             clean_srpm_dir "$RPMBUILD_BASE/SRPMS"
+             clean_srpm_dir "$RPMBUILD_BASE/SRPMS" 1
          fi
          if [ -d $RPMBUILD_BASE ]; then
              echo "rm -rf $RPMBUILD_BASE"
@@ -1036,6 +1128,23 @@ build_dir_spec () {
                  fi
              fi
 
+             \rm -f -v "$REFERENCE_MD5"
+             \mv -v "$INPUT_FILES_MD5" "$REFERENCE_MD5"
+
+             local SPEC_DIR=$(spec_cache_dir_from_srpm $SRPM_OUT/$ss)
+             if [ -d $SPEC_DIR/BUILDS_VR ]; then
+                for f in $(ls -1 $SPEC_DIR/BUILDS_VR); do
+                    for r in $(find  $RPM_DIR -name "$f*rpm" 2>> /dev/null); do
+                       \rm -f -v $r
+                    done
+                done
+             fi
+
+             local RESULT_DIR=$(result_dir_from_srpm $SRPM_OUT/$ss)
+             if [ -d $RESULT_DIR ]; then
+                 echo "rm -rf $RESULT_DIR"
+                 \rm -rf $RESULT_DIR
+             fi
          done
 
          SRPM_REBUILT_LIST="$SRPM_REBUILT_LIST $TARGET_FOUND"
@@ -1204,7 +1313,7 @@ if [ $ALL -eq 1 ]; then
         if [ $FOUND -eq 0 ]; then
             for INPUT_DIR in $(find $BUILD_INPUTS -name $NAME | sort -V); do
                 if [ -d "$INPUT_DIR/rpmbuild/SRPMS" ]; then
-                    clean_srpm_dir "$INPUT_DIR/rpmbuild/SRPMS"
+                    clean_srpm_dir "$INPUT_DIR/rpmbuild/SRPMS" 0
                 fi
                 if [ -d $INPUT_DIR ]; then
                     echo "rm -rf $r"
@@ -1217,10 +1326,12 @@ if [ $ALL -eq 1 ]; then
         fi
     done
 fi
+echo "Auditing for obsolete srpms done"
 
 if [ $CLEAN_FLAG -eq 1 ]; then
     if [ $ALL -eq 1 ]; then
        \rm -rf $BUILD_INPUTS
+       \rm -rf $SOURCE_OUT/*.src.rpm
     fi
 fi
 
