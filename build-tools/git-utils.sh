@@ -9,6 +9,10 @@
 # by repo manifests.
 #
 
+git_ctx_root_dir () {
+    dirname "${MY_REPO}"
+}
+
 #
 # git_list <dir>:
 #      Return a list of git root directories found under <dir>
@@ -22,12 +26,12 @@ git_list () {
 
 # GIT_LIST: A list of root directories for all the gits under $MY_REPO/..
 #           as absolute paths.
-export GIT_LIST=$(git_list "$(dirname "${MY_REPO}")")
+export GIT_LIST=$(git_list "$(git_ctx_root_dir)")
 
 
 # GIT_LIST_REL: A list of root directories for all the gits under $MY_REPO/..
 #               as relative paths.
-export GIT_LIST_REL=$(for p in $GIT_LIST; do echo .${p#$(dirname ${MY_REPO})}; done)
+export GIT_LIST_REL=$(for p in $GIT_LIST; do echo .${p#$(git_ctx_root_dir)}; done)
 
 
 #
@@ -85,7 +89,9 @@ git_list_containing_tag () {
 
 git_context () {
     (
-    cd $MY_REPO
+    cd $(git_ctx_root_dir)
+
+    local d
     for d in $GIT_LIST_REL; do
         (
         cd ${d}
@@ -94,4 +100,49 @@ git_context () {
         )
     done
     )
+}
+
+#
+# git_test_context <context>:
+#
+# Test if all commits referenced in the context are present
+# in the history of the gits in their current checkout state.
+#
+# Returns: 0 = context is present in git history
+#          1 = At least one element of context is not present
+#          2 = error
+#
+git_test_context () {
+    local context="$1"
+    local query=""
+    local target_hits=0
+    local actual_hits=0
+
+    if [ ! -f "$context" ]; then
+        return 2
+    fi
+
+    query=$(mktemp "/tmp/git_test_context_XXXXXX")
+    if [ "$query" == "" ]; then
+        return 2
+    fi
+
+    # Transform a checkout context into a query that prints
+    # all the commits that are found in the git history.
+    #
+    # Limit search to last 500 commits in the interest of speed.
+    # I don't expect to be using contexts more than a few weeks old.
+    cat "$context" | \
+        sed "s#checkout -f \([a-e0-9]*\)#rev-list --max-count=500 HEAD | \
+        grep \1#" > $query
+
+    target_hits=$(cat "$context" | wc -l)
+    actual_hits=$(cd $(git_ctx_root_dir); source $query | wc -l)
+    \rm $query
+
+    if [ $actual_hits -eq $target_hits ]; then
+        return 0
+    fi
+
+    return 1
 }
