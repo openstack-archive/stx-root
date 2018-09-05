@@ -1,6 +1,16 @@
 #!/bin/bash
 
+#
+# Copyright (c) 2018 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+#
+# Builds rpm files from src.rpm files.
+#
 # This program is a wrapper around build-rpms-parallel and build-rpms-serial
+#
 
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
