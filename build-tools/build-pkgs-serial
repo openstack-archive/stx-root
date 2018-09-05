@@ -1,10 +1,22 @@
 #!/bin/bash
 
-# This program is a wrapper around build-srpms and build-rpms
+#
+# Copyright (c) 2018 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+#
+# Build first src.rpms, then rpms, from source, or from a downloaded tarball
+# or src.rpm plus our additional patches.
+#
+# This program is a wrapper around build-srpms-serial and build-rpms-serial
+#
 
 BUILD_PKGS_SERIAL_DIR="$(dirname "$(readlink -f "${BASH_SOURCE[0]}" )" )"
 
 source "${BUILD_PKGS_SERIAL_DIR}/git-utils.sh"
+source "${BUILD_PKGS_SERIAL_DIR}/build-avoidance-utils.sh"
 source "${BUILD_PKGS_SERIAL_DIR}/spec-utils"
 
 
@@ -13,14 +25,15 @@ usage () {
     echo "Usage: "
     echo "   Create source and Binary rpms:"
     echo "   Build optimizations (--no-descendants, --no-required, --no-build-info,"
-    echo "   --no-autoclean) are not recommended for the first build after a clone/pull,"
-    echo "   nor the final build prior to creating an iso or patch, but can be used"
-    echo "   for intermediate builds.  i.e. while debugging compilation failures." 
-    echo "      build-pkgs-serial [--no-descendants] [--no-required] [--no-build-info] [--no-autoclean] [--careful] [--formal] [ list of package names ]"
+    echo "   --no-autoclean, --no-build-avoidance) are not recommended for the first build"
+    echo "   after a clone/pull, nor the final build prior to creating an iso or patch,"
+    echo "   but can be used for intermediate builds."
+    echo "   i.e. while debugging compilation failures."
+    echo "      build-pkgs-serial [--build-avoidance | --no-build-avoidance] [--no-descendants] [--no-required] [--no-build-info] [--no-autoclean] [--careful] [--formal] [ list of package names ]"
     echo ""
     echo "   Delete source rpms, and the directories associated with it's creation:"
     echo "   Note: does not clean an edit environment"
-    echo "      build-pkgs-serial --clean [ list of package names ]"
+    echo "      build-pkgs-serial --clean [--build-avoidance | --no-build-avoidance] [ list of package names ]"
     echo ""
     echo "   Extract an src.rpm into a pair of git trees to aid in editing it's contents,"
     echo "   one for source code and one for metadata such as the spec file."
@@ -39,12 +52,17 @@ usage () {
 HELP=0
 CLEAN_FLAG=0
 EDIT_FLAG=0
+APPEND_LOG_FLAG=0
+BUILD_AVOIDANCE_FLAG=0
 STD_BUILD=1
 RT_BUILD=1
 INSTALLER_BUILD=0
 
+export BUILD_AVOIDANCE_URL=""
+
+
 # read the options
-TEMP=$(getopt -o h --long serial,rt,std,edit,no-meta-patch,no-descendants,no-required,no-build-info,no-autoclean,formal,careful,help,clean -n 'build-pkgs' -- "$@")
+TEMP=$(getopt -o h --long serial,rt,std,installer,edit,build-avoidance,no-build-avoidance,build-avoidance-dir:,build-avoidance-host:,build-avoidance-user:,build-avoidance-day:,no-meta-patch,no-descendants,no-required,no-build-info,no-autoclean,formal,careful,help,clean,append-log -n 'build-pkgs-serial' -- "$@")
 if [ $? -ne 0 ]; then
     usage
     exit 1
@@ -55,8 +73,21 @@ eval set -- "$TEMP"
 EXTRA_ARGS_COMMON=""
 EXTRA_ARGS_SRPM=""
 EXTRA_ARGS_RPM=""
+
+export BUILD_AVOIDANCE_OVERRIDE_DIR=""
+export BUILD_AVOIDANCE_OVERRIDE_HOST=""
+export BUILD_AVOIDANCE_OVERRIDE_USR=""
+export BUILD_AVOIDANCE_DAY=""
+
 while true ; do
     case "$1" in
+        --append-log)     APPEND_LOG_FLAG=1 ; shift ;;
+        --build-avoidance) BUILD_AVOIDANCE_FLAG=1 ; shift ;;
+        --no-build-avoidance) BUILD_AVOIDANCE_FLAG=0 ; shift ;;
+        --build-avoidance-dir)  BUILD_AVOIDANCE_OVERRIDE_DIR=$2; shift 2 ;;
+        --build-avoidance-host)  BUILD_AVOIDANCE_OVERRIDE_HOST=$2; shift 2 ;;
+        --build-avoidance-user)  BUILD_AVOIDANCE_OVERRIDE_USR=$2; shift 2 ;;
+        --build-avoidance-day) BUILD_AVOIDANCE_DAY=$2; shift 2 ;;
         --no-descendants) EXTRA_ARGS_COMMON+=" --no-descendants" ; shift ;;
         --formal)         EXTRA_ARGS_COMMON+=" --formal" ; shift ;;
         --careful)        EXTRA_ARGS_RPM+=" --careful" ; shift ;;
@@ -80,6 +111,50 @@ if [ $HELP -eq 1 ]; then
     usage
     exit 0
 fi
+
+function my_exit() {
+    build-rpms-parallel --std --tmpfs-clean
+    build-rpms-parallel --rt --tmpfs-clean
+}
+
+function my_sigint() {
+    echo "build-pkgs-parallel sigint"
+    pkill -SIGABRT -P $BASHPID &> /dev/null
+    echo "build-pkgs-parallel waiting"
+    wait
+    echo "build-pkgs-parallel wait complete"
+
+}
+
+function my_sighup() {
+    echo "build-pkgs-parallel sighup"
+    pkill -SIGABRT -P $BASHPID &> /dev/null
+    echo "build-pkgs-parallel waiting"
+    wait
+    echo "build-pkgs-parallel wait complete"
+}
+
+function my_sigabrt() {
+    echo "build-pkgs-parallel sigabrt"
+    pkill -SIGABRT -P $BASHPID &> /dev/null
+    echo "build-pkgs-parallel waiting"
+    wait
+    echo "build-pkgs-parallel wait complete"
+}
+
+function my_sigterm() {
+    echo "build-pkgs-parallel sigterm"
+    pkill -SIGABRT -P $BASHPID &> /dev/null
+    echo "build-pkgs-parallel waiting"
+    wait
+    echo "build-pkgs-parallel wait complete"
+}
+
+trap my_exit EXIT
+trap my_sigint INT
+trap my_sighup HUP
+trap my_sigabrt ABRT
+trap my_sigterm TERM
 
 TARGETS=" $@ "
 TARGETS_STD=" "
@@ -159,8 +234,18 @@ find_targets () {
    return 0
 }
 
+if [ $EDIT_FLAG -eq 1 ] || [ "x$TARGETS" != "x  " ]; then
+   BUILD_AVOIDANCE_FLAG=0
+fi
+
+echo "BUILD_AVOIDANCE_FLAG=$BUILD_AVOIDANCE_FLAG"
 echo "CLEAN_FLAG=$CLEAN_FLAG"
 echo "EDIT_FLAG=$EDIT_FLAG"
+
+if [ $BUILD_AVOIDANCE_FLAG -eq 1 ]; then
+    # Build Avoidance requested. Get URL of a usable context, if any.
+    export BUILD_AVOIDANCE_URL=$(get_build_avoidance_context)
+fi
 
 if [ "x$TARGETS" != "x  " ]; then
    TARGETS_STD="$(find_targets centos_pkg_dirs)"
@@ -207,6 +292,11 @@ echo "TARGETS_INSTALLER='$TARGETS_INSTALLER'"
 echo "TARGETS_MISC='$TARGETS_MISC'"
 
 if [ $CLEAN_FLAG -eq 1 ]; then
+
+   if [ "x$TARGETS" == "x  " ] && [ $BUILD_AVOIDANCE_FLAG -eq 1 ] ; then
+      build_avoidance_clean
+   fi
+
    if [ $STD_BUILD -eq 1 ]; then
       if [ "x$TARGETS" == "x  " ] || [ "$TARGETS_STD" != " " ] || [ "$TARGETS_MISC" != " " ]; then
          if [ $EDIT_FLAG -ne 1 ]; then
@@ -273,8 +363,18 @@ function launch_build()
    fi
 
    echo "Launching $build_type build, logging to $logfile"
+   if [ $APPEND_LOG_FLAG -eq 0 ] && [ -f $logfile ]; then
+       \rm $logfile
+   fi
 
    echo -e "\n######## $(date): Launching build-srpms-serial --$build_type $EXTRA_ARGS $@\n" | tee --append $logfile
+
+   echo "BUILD_AVOIDANCE_URL=$BUILD_AVOIDANCE_URL" | tee --append $logfile
+   if [ "x$BUILD_AVOIDANCE_URL" != "x" ]; then
+      echo "build_avoidance $build_type" | tee --append $logfile
+      build_avoidance $build_type 2>&1 | tee --append $logfile
+   fi
+
    # No clean flag, call build-srpms-serial followed by build-rpms-serial
    echo "${BUILD_PKGS_SERIAL_DIR}/build-srpms-serial --$build_type $EXTRA_ARGS_COMMON $EXTRA_ARGS_SRPM $targets" | tee --append $logfile
    ${BUILD_PKGS_SERIAL_DIR}/build-srpms-serial --$build_type $EXTRA_ARGS_COMMON $EXTRA_ARGS_SRPM $targets 2>&1 | tee --append $logfile
@@ -353,6 +453,11 @@ if [ $INSTALLER_BUILD -eq 1 ]; then
    fi
 else
    echo "Skipping 'installer' build"
+fi
+
+if [ $REFERENCE_BUILD -eq 1 ]; then
+    echo "Saving reference context"
+    build_avoidance_save_reference_context
 fi
 
 echo "All builds were successful"

@@ -6,6 +6,22 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
+# 
+# Builds rpm files from src.rpm files.
+#
+# This version compiles one package at a time.
+# 
+# The location of packages to be built is 
+# $MY_WORKSPACE/<build-type>/rpmbuild/SRPMS.
+#
+# The build order is a derived from the BuildRequires in the 
+# spec files in the src.rpms.  Note that the BuildRequires sometimes
+# create dependency loops, so no correct order can be computed.  In these
+# cases we add a retry loop.  As long as one new package builds, we
+# keep retrying the loop, until all are built, or no progress is made.
+# So please don't panic and CTRL-C just because you see a few error
+# messages go by!
+#
 
 export ME=$(basename "$0")
 CMDLINE="$ME $@"
@@ -63,12 +79,10 @@ create-no-clean-list () {
    if [ ! -f $NO_CLEAN_LIST_FILE ]; then
        NEED_REBUILD=1
    else
-       if [ -f MY_BUILD_CFG ]; then
-           if [ -f MY_BUILD_CFG ]; then
-               find "$MY_BUILD_CFG" -not -newermm "$NO_CLEAN_LIST_FILE" | grep -q $(basename $MY_BUILD_CFG)
-               if [ $? -eq 0 ]; then
-                   NEED_REBUILD=1
-               fi
+       if [ -f $MY_BUILD_CFG ]; then
+           find "$MY_BUILD_CFG" -not -newermm "$NO_CLEAN_LIST_FILE" | grep -q $(basename $MY_BUILD_CFG)
+           if [ $? -eq 0 ]; then
+               NEED_REBUILD=1
            fi
        fi
    fi

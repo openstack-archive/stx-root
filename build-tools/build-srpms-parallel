@@ -1,6 +1,26 @@
 #!/bin/bash
 # set -x
 
+#
+# Copyright (c) 2018 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+#
+# Create src.rpm files from source, or from a downloaded tarball
+# or src.rpm plus our additional patches.
+#
+# This version tries to compile many packages in parallel.
+#
+# The location of packages to be build are identified by
+# <distro>_pkg_dirs[_<opt-build-type>] files located at the root of
+# any git tree (e.g. istx/stx-integ/centos_pkg_dirs).
+#
+# The build of an individul package is driven by it's build_srpm.data
+# file plus a <pkg-name>.spec file or an srpm_path file.
+#
+
 export ME=$(basename "$0")
 CMDLINE="$ME $@"
 
@@ -9,6 +29,7 @@ source $BUILD_SRPMS_PARALLEL_DIR/git-utils.sh
 source $BUILD_SRPMS_PARALLEL_DIR/spec-utils
 source $BUILD_SRPMS_PARALLEL_DIR/srpm-utils
 source $BUILD_SRPMS_PARALLEL_DIR/classify
+source $BUILD_SRPMS_PARALLEL_DIR/build-srpms-common.sh
 
 
 INITIAL_DIR=$(pwd)
@@ -372,7 +393,7 @@ build_dir () {
          fi
 
          if [ "${ORIG_SRPM_PATH}x" == "x" ]; then
-            # handle mirror: definitions
+            # handle 3rd_party: definitions
             echo "$p" | grep "^3rd_party:" >/dev/null && ORIG_SRPM_PATH=$(echo $p | sed "s%^3rd_party:%$THIRD_PARTY_ROOT/%")
          fi
 
@@ -455,7 +476,7 @@ clean_srpm_dir () {
    local SRPM_OUT_NAME
    local INPUTS_TO_CLEAN=""
 
-   if [ $EXCLUDE_MD5 == "" ]; then
+   if [ "$EXCLUDE_MD5" == "" ]; then
        EXCLUDE_MD5=0
    fi
 
@@ -626,24 +647,15 @@ build_dir_srpm () {
       # Capture md5 data for all input files
       #
       local TARGET_SOURCES_DIR="$SOURCES_DIR/$TARGET_FOUND"
-      local INPUT_FILES="$TARGET_SOURCES_DIR/srpm_input.files"
-      local INPUT_FILES_SORTED="$TARGET_SOURCES_DIR/srpm_sorted_input.files"
       local INPUT_FILES_MD5="$TARGET_SOURCES_DIR/srpm_input.md5"
       local REFERENCE_MD5="$TARGET_SOURCES_DIR/srpm_reference.md5"
 
       mkdir -p "$TARGET_SOURCES_DIR"
-      find $PKG_BASE -type f > $INPUT_FILES
-      find $ORIG_SRPM_PATH -type f >> $INPUT_FILES
-         (
-         cd $PKG_BASE
-         if [ "x$COPY_LIST" != "x" ]; then
-            find $COPY_LIST -type f >> $INPUT_FILES
-         fi
-         )
-      cat $INPUT_FILES | xargs readlink -f | sort --unique > $INPUT_FILES_SORTED
-      \rm -f $INPUT_FILES
-      cat $INPUT_FILES_SORTED | xargs md5sum | sed "s# $(readlink -f $MY_REPO)/# #" > $INPUT_FILES_MD5
-      \rm -f $INPUT_FILES_SORTED
+      md5sums_from_input_vars "$SRC_BUILD_TYPE_SRPM" "$ORIG_SRPM_PATH" "$TARGET_SOURCES_DIR" > "$INPUT_FILES_MD5"
+      if [ $? -ne 0 ]; then
+         echo "ERROR: $FUNCNAME (${LINENO}): md5sums_from_input_vars '$SRC_BUILD_TYPE_SRPM' '$ORIG_SRPM_PATH' '$TARGET_SOURCES_DIR'"
+         return 1
+      fi
       echo "Wrote: $INPUT_FILES_MD5"
 
       #
@@ -946,38 +958,15 @@ build_dir_spec () {
          # Capture md5 data for all input files
          #
          local TARGET_SOURCES_DIR="$SOURCES_DIR/$TARGET_FOUND"
-         local INPUT_FILES="$TARGET_SOURCES_DIR/srpm_input.files"
-         local INPUT_FILES_SORTED="$TARGET_SOURCES_DIR/srpm_sorted_input.files"
          local INPUT_FILES_MD5="$TARGET_SOURCES_DIR/srpm_input.md5"
          local REFERENCE_MD5="$TARGET_SOURCES_DIR/srpm_reference.md5"
 
          mkdir -p "$TARGET_SOURCES_DIR"
-         find $PKG_BASE -type f > $INPUT_FILES
-         find $ORIG_SRPM_PATH -type f >> $INPUT_FILES
-            (
-            cd $PKG_BASE
-            if [ "x$SRC_DIR" != "x" ]; then
-               if [ -d "$SRC_DIR" ]; then
-                  find $SRC_DIR -type f | grep -v '[/][.]git$' | grep -v '[/][.]git[/]' >> $INPUT_FILES
-               fi
-            fi
-
-            if [ "x$COPY_LIST" != "x" ]; then
-               find $COPY_LIST -type f >> $INPUT_FILES
-            fi
-
-            if [ "x$COPY_LIST_TO_TAR" != "x" ]; then
-               find $COPY_LIST_TO_TAR -type f >> $INPUT_FILES
-            fi
-
-            if [ "x$OPT_DEP_LIST" != "x" ]; then
-               find $OPT_DEP_LIST -type f >> $INPUT_FILES 2> /dev/null
-            fi
-            )
-         cat $INPUT_FILES | xargs readlink -f | sort --unique > $INPUT_FILES_SORTED
-         \rm -f $INPUT_FILES
-         cat $INPUT_FILES_SORTED | xargs md5sum | sed "s# $(readlink -f $MY_REPO)/# #" > $INPUT_FILES_MD5
-         \rm -f $INPUT_FILES_SORTED
+         md5sums_from_input_vars "$SRC_BUILD_TYPE_SPEC" "$SPEC" "$TARGET_SOURCES_DIR" > "$INPUT_FILES_MD5"
+         if [ $? -ne 0 ]; then
+             echo "ERROR: $FUNCNAME (${LINENO}): md5sums_from_input_vars '$SRC_BUILD_TYPE_SPEC' '$SPEC' '$TARGET_SOURCES_DIR'"
+             return 1
+         fi
          echo "Wrote: $INPUT_FILES_MD5"
 
          #

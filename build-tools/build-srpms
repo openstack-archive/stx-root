@@ -1,6 +1,24 @@
 #!/bin/bash
 
+#
+# Copyright (c) 2018 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+#
+# Create src.rpm files from source, or from a downloaded tarball
+# or src.rpm plus our additional patches.
+#
 # This program is a wrapper around build-srpms-parallel and build-srpms-serial
+#
+# The location of packages to be build are identified by
+# <distro>_pkg_dirs[_<opt-build-type>] files located at the root of
+# any git tree (e.g. istx/stx-integ/centos_pkg_dirs).
+#
+# The build of an individul package is driven by it's build_srpm.data
+# file plus a <pkg-name>.spec file or an srpm_path file.
+#
 
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
