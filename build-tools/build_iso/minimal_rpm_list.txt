@@ -201,7 +201,7 @@ policycoreutils
 popt
 procps-ng
 pth
-pygobject3-base
+python-gobject-base
 pygpgme
 pyliblzma
 python
@@ -220,7 +220,7 @@ python-slip-dbus
 python-urlgrabber
 pyxattr
 qrencode-libs
-rdma
+rdma-core
 readline
 rootfiles
 rpm
