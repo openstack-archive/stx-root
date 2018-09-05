@@ -7,6 +7,9 @@
 #
 
 #
+# Build first src.rpms, then rpms, from source, or from a downloaded tarball
+# or src.rpm plus our additional patches.
+#
 # This program is a wrapper around build-pkgs-parallel and build-pkgs-serial
 #
 

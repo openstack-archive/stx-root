@@ -1,0 +1,23 @@
+#
+# Copyright (c) 2018 Wind River Systems, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+
+#
+# What files and directories need to be copied
+#
+BUILD_AVOIDANCE_SRPM_DIRECTORIES="inputs srpm_assemble rpmbuild/SRPMS rpmbuild/SOURCES"
+BUILD_AVOIDANCE_SRPM_FILES=""
+BUILD_AVOIDANCE_RPM_DIRECTORIES="results rpmbuild/RPMS rpmbuild/SPECS"
+BUILD_AVOIDANCE_RPM_FILES=".platform_release"
+
+
+#
+# Copy the lines below to $MY_REPO/local-build-data/build_avoidance_source,
+# then uncomment and fill in the values giving the location of your local reference build.
+#
+# BUILD_AVOIDANCE_USR="jenkins"
+# BUILD_AVOIDANCE_HOST="machine.corp.com"
+# BUILD_AVOIDANCE_DIR="/localdisk/loadbuild/jenkins/StarlingX_Build"
