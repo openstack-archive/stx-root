@@ -253,8 +253,6 @@ if [ $CLEAN_FLAG -eq 1 ]; then
    if [ $STD_BUILD -eq 1 ]; then
       if [ "x$TARGETS" == "x  " ] || [ "$TARGETS_STD" != " " ] || [ "$TARGETS_MISC" != " " ]; then
          if [ $EDIT_FLAG -ne 1 ]; then
-            echo "$DIR/build-rpms-parallel --std --clean $EXTRA_ARGS_COMMON $EXTRA_ARGS_RPM $TARGETS_STD $TARGETS_MISC"
-            $DIR/build-rpms-parallel --std --clean $EXTRA_ARGS_COMMON $EXTRA_ARGS_RPM $TARGETS_STD $TARGETS_MISC || exit 1
             echo "${BUILD_PKGS_PARALLEL_DIR}/build-rpms-parallel --std --clean $EXTRA_ARGS_COMMON $EXTRA_ARGS_RPM $TARGETS_STD $TARGETS_MISC"
             ${BUILD_PKGS_PARALLEL_DIR}/build-rpms-parallel --std --clean $EXTRA_ARGS_COMMON $EXTRA_ARGS_RPM $TARGETS_STD $TARGETS_MISC || exit 1
 
