@@ -73,6 +73,20 @@ function check_vars {
 # This process is using mock because the build servers do not have the same rpm / rpmsign version
 #
 
+function _local_cleanup {
+
+   printf "Cleaning mock environment\n"
+   $MOCK -q -r $_MOCK_CFG --scrub=all
+
+}
+
+function __local_trapdoor {
+    printf "caught signal while attempting to sign files. Cleaning up."
+    _local_cleanup
+
+    exit 1
+}
+
 
 function sign_packages {
    OLD_PWD=$PWD
@@ -104,14 +118,17 @@ function sign_packages {
 
    printf "Initializing mock environment\n"
 
+   trap __local_trapdoor SIGHUP SIGINT SIGABRT SIGTERM
+
    # invoke make in mock to sign packages.
    # this call will also create and initialize the mock env
    eval $MOCK -q -r $_MOCK_CFG \'--plugin-option=bind_mount:dirs=[\(\"$_PKG_DIR\", \"$_MOCK_PKG_DIR\"\),\(\"$_MK_DIR\",\"$_MOCK_MK_DIR\"\),\(\"$_KEY_DIR\",\"$_MOCK_KEY_DIR\"\)]\' --shell \"cd $_MOCK_PKG_DIR\; make -j $NPROCS -f $_MOCK_MK_DIR/$_SIGN_MAKEFILE KEY=$_MOCK_KEY_DIR/$_IMA_PRIV_KEY\"
 
    retval=$?
 
-   printf "Cleaning mock environment\n"
-   $MOCK -q -r $_MOCK_CFG --scrub=all
+   trap - SIGHUP SIGINT SIGABRT SIGTERM
+
+   _local_cleanup
 
    if [ $retval -ne 0 ] ; then
       echo "failed to add file signatures to RPMs in mock environment."
@@ -153,6 +170,29 @@ function _copy_and_sign {
 }
 
 
+function _server_cleanup {
+
+   # cleanup
+   ssh $SIGNING_USER@$SIGNING_SERVER rm $_UPLOAD_DIR/*.rpm
+   if [ $? -ne 0 ] ; then
+      echo "Warning : failed to remove rpms from temporary upload directory ${SIGNING_SERVER}:${_UPLOAD_DIR}."
+   fi
+   ssh $SIGNING_USER@$SIGNING_SERVER rmdir $_UPLOAD_DIR
+   if [ $? -ne 0 ] ; then
+      echo "Warning : failed to remove temporary upload directory ${SIGNING_SERVER}:${_UPLOAD_DIR}."
+   fi
+
+}
+
+function __server_trapdoor {
+
+    printf "caught signal while attempting to sign files. Cleaning up."
+    _server_cleanup
+
+    exit 1
+}
+
+
 function sign_packages_on_server {
 
    retval=0
@@ -172,18 +212,14 @@ function sign_packages_on_server {
    # this is the upload temp dir, outside of chroot env
    _UPLOAD_DIR=$base$sub
 
+   trap __server_trapdoor SIGHUP SIGINT SIGABRT SIGTERM
+
    _copy_and_sign
    retval=$?
 
-   # cleanup
-   ssh $SIGNING_USER@$SIGNING_SERVER rm $_UPLOAD_DIR/*.rpm
-   if [ $? -ne 0 ] ; then
-      echo "Warning : failed to remove rpms from temporary upload directory."
-   fi
-   ssh $SIGNING_USER@$SIGNING_SERVER rmdir $_UPLOAD_DIR
-   if [ $? -ne 0 ] ; then
-      echo "Warning : failed to remove temporary upload directory."
-   fi
+   trap - SIGHUP SIGINT SIGABRT SIGTERM
+
+   _server_cleanup
 
    return $retval
 }
@@ -196,9 +232,6 @@ function sign_packages_on_server {
 
 # Check args
 HELP=0
-SIGNING_SERVER=yow-tiks01
-SIGNING_USER=signing
-SIGNING_SERVER_SCRIPT=/opt/signing/sign_rpms_18.03.sh
 
 # return value
 retval=0
