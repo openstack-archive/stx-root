@@ -1,0 +1,8 @@
+Code-Review+2: Dean Troyer <dtroyer@gmail.com>
+Workflow+1: Dean Troyer <dtroyer@gmail.com>
+Verified+2: Zuul
+Submitted-by: Zuul
+Submitted-at: Tue, 11 Sep 2018 21:01:11 +0000
+Reviewed-on: https://review.openstack.org/601643
+Project: openstack/stx-root
+Branch: refs/heads/f/centos75
