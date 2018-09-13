@@ -364,6 +364,15 @@ else
     exit -1
 fi
 
+echo "--> find lz4 rpm"
+lz4_rpm=$(find $MY_BUILD_DIR/export/dist/isolinux/Packages -type f -name "lz4-[0-9]*.x86_64.rpm")
+if [ -n $lz4_rpm ] && [ -f $lz4_rpm ];then
+    cp -f $lz4_rpm $rootfs_rpms/.
+else
+    echo "ERROR: failed to find lz4_rpm RPM!"
+    exit -1
+fi
+
 echo "--> find bind-utils rpm"
 bind_utils=$(find $MY_BUILD_DIR/export/dist/isolinux/Packages -type f -name "bind-utils-[0-9]*.x86_64.rpm")
 if [ -n $bind_utils ] && [ -f $bind_utils ];then
