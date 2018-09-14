@@ -454,8 +454,6 @@ if [ "x$MY_WORKSPACE" == "x" ]; then
 fi
 
 ARCH="x86_64"
-SIGNING_SERVER=yow-tiks01
-SIGNING_USER=signing
 SIGNING_SCRIPT=/opt/signing/sign.sh
 UPLOAD_PATH=`ssh $SIGNING_USER@$SIGNING_SERVER sudo $SIGNING_SCRIPT -r`
 SIGNED_PKG_DB=${MY_WORKSPACE}/signed_pkg_list.txt
