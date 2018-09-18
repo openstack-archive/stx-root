@@ -1428,6 +1428,16 @@ UNRESOLVED_TARGETS=$(for i in $(seq 0 $((max_workers-1))); do
 
 \rm -rf $MY_WORKSPACE/tmp/SRPM_REBUILT_LIST_* $MY_WORKSPACE/tmp/SRPM_FAILED_REBUILD_LIST_* $MY_WORKSPACE/tmp/UNRESOLVED_TARGETS* 2>> /dev/null
 
+cleanup() {
+    if [ -n "$MY_WORKSPACE/tmp" -a -d "${MY_WORKSPACE}/tmp" ]; then
+        echo "clean up $MY_WORKSPACE/tmp"
+        rm -rf $MY_WORKSPACE/tmp
+    fi
+}
+
+# cleanup temp files when system exiting
+trap cleanup EXIT
+
 # Try to find and clean orphaned and discontinued .src.rpm's 
 if [ $ALL -eq 1 ]; then
     echo
