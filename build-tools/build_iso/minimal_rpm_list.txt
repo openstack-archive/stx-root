@@ -201,7 +201,7 @@ policycoreutils
 popt
 procps-ng
 pth
-pygobject3-base
+python-gobject-base
 pygpgme
 pyliblzma
 python
