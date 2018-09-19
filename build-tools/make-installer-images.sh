@@ -42,22 +42,15 @@ EOF
 echo "This script makes new initrd.img, vmlinuz and squashfs.img."
 echo "NOTE: it has to be executed with *root*!"
 
-if [ $# -lt 2 ];then
-    echo "$0 <work_dir> <kernel_mode>"
-    echo "kernel_mode: std or rt"
+if [ $# -lt 1 ];then
+    echo "$0 <work_dir>"
     exit -1;
 fi
 
 work_dir=$1
-mode=$2
 output_dir=$work_dir/output
 if [ ! -d $output_dir ]; then
     mkdir -p $output_dir;
-fi
-
-if [ "$mode" != "std" ] && [ "$mode" != "rt" ]; then
-    echo "ERROR: wrong kernel mode, must be std or rt"
-    exit -1
 fi
 
 timestamp=$(date +%F_%H%M)
@@ -90,7 +83,7 @@ echo "--> clean up $initrd_root"
 clean_rootfs $initrd_root
 
 echo "--> extract files from new kernel and its modular rpms to initrd root"
-for kf in $kernel_rpms_dir/$mode/*.rpm ; do rpm2cpio $kf | cpio -idu; done
+for kf in ${kernel_rpms_dir}/std/*.rpm ; do rpm2cpio $kf | cpio -idu; done
 
 # by now new kernel and its modules exist!
 # find new kernel in /boot/
@@ -99,17 +92,11 @@ new_kernel="$(ls ./boot/vmlinuz-*)"
 echo $new_kernel
 if [ -f $new_kernel ];then
     #copy out the new kernel
-    if [ $mode == "std" ];then
-        if [ -f $output_dir/new-vmlinuz ]; then
-            mv -f $output_dir/new-vmlinuz $output_dir/vmlinuz-bakcup-$timestamp
-        fi
-        cp -f $new_kernel $output_dir/new-vmlinuz
-    else
-        if [ -f $output_dir/new-vmlinuz-rt ]; then
-            mv -f $output_dir/new-vmlinuz-rt $output_dir/vmlinuz-rt-bakcup-$timestamp
-        fi
-        cp -f $new_kernel $output_dir/new-vmlinuz-rt
+    if [ -f $output_dir/new-vmlinuz ]; then
+        mv -f $output_dir/new-vmlinuz $output_dir/vmlinuz-backup-$timestamp
     fi
+    cp -f $new_kernel $output_dir/new-vmlinuz
+
     kernel_name=$(basename $new_kernel)
     new_ver=$(echo $kernel_name | cut -d'-' -f2-)
     echo $new_ver
@@ -129,7 +116,7 @@ EOF
 
 echo "--> Rebuild the initrd"
 if [ -f $output_dir/new-initrd.img ]; then
-    mv -f $output_dir/new-initrd.img $output_dir/initrd.img-bakcup-$timestamp
+    mv -f $output_dir/new-initrd.img $output_dir/initrd.img-backup-$timestamp
 fi
 find . | cpio -o -H newc | xz --check=crc32 --x86 --lzma2=dict=512KiB > $output_dir/new-initrd.img
 if [ $? != 0 ];then
@@ -214,7 +201,7 @@ echo "--> extract files from rootfs-rpms to squashfs root"
 for ff in $rootfs_rpms_dir/*.rpm ; do rpm2cpio $ff | cpio -idu; done
 
 echo "--> extract files from kernel and its modular rpms to squashfs root"
-for kf in $kernel_rpms_dir/$mode/*.rpm ; do rpm2cpio $kf | cpio -idu; done
+for kf in ${kernel_rpms_dir}/std/*.rpm ; do rpm2cpio $kf | cpio -idu; done
 
 echo "-->check module dependencies in new squashfs.img in chroot context"
 #we are using the same new  kernel-xxx.rpm, so the $new_ver is the same

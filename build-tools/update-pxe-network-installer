@@ -4,20 +4,6 @@
 ## created by Yong Hu (yong.hu@intel.com), 05/24/2018
 
 
-kernel_mode=0
-for arg in "$@"; do
-    case "$1" in
-        --std) kernel_mode=0 ;;
-        --rt) kernel_mode=1 ;;
-        --help) echo "Update pxe-network-installer images"; 
-               echo "$(basename $0) --std for standard kernel mode, or"
-               echo "$(basename $0) --rt for realtime kernel mode";
-	       exit 0;;
-	*) echo "unknown argument";
-	    exit 1;;
-    esac
-done
-
 echo "Start to update pxe-network-installer images .... "
 timestamp=$(date +%F_%H%M)
 cur_dir=$PWD
@@ -34,14 +20,6 @@ CENTOS_REPO="cgcs-centos-repo"
 orig_img_dir="orig"
 if [ ! -d $orig_img_dir ];then
     mkdir -p $orig_img_dir
-fi
-
-orig_kernel_img="$MY_REPO/$CENTOS_REPO/Binary/images/pxeboot/vmlinuz"
-if [ -f $orig_kernel_img ]; then
-    cp -f $orig_kernel_img $pxe_network_installer_dir/$orig_img_dir/.
-else
-    echo "$orig_kernel_img does not exit"
-    exit -1
 fi
 
 orig_initrd_img="$MY_REPO/$CENTOS_REPO/Binary/images/pxeboot/initrd.img"
@@ -125,24 +103,6 @@ else
     exit -1
 fi
 
-echo "--> find mlnx-ofa_kernel"
-mlnx_ofa_kernel=$(find $MY_BUILD_DIR/std/rpmbuild/RPMS -type f -name "mlnx-ofa_kernel-[0-9]*.x86_64.rpm")
-if [ -n $mlnx_ofa_kernel ] && [ -f $mlnx_ofa_kernel ];then
-    cp -f $mlnx_ofa_kernel $kernel_rpms_std/.
-else
-    echo "ERROR: failed to find mlnx-ofa_kernel module RPM!"
-    exit -1
-fi
-
-echo "--> find mlnx-ofa_kernel-devel"
-mlnx_ofa_kernel_devel=$(find $MY_BUILD_DIR/std/rpmbuild/RPMS -type f -name "mlnx-ofa_kernel-devel-[0-9]*.x86_64.rpm")
-if [ -n $mlnx_ofa_kernel_devel ] && [ -f $mlnx_ofa_kernel_devel ];then
-    cp -f $mlnx_ofa_kernel_devel $kernel_rpms_std/.
-else
-    echo "ERROR: failed to find mlnx-ofa_kernel-devel module RPM!"
-    exit -1
-fi
-
 echo "--> find mlnx-ofa_kernel_modules"
 mlnx_ofa_kernel_modules=$(find $MY_BUILD_DIR/std/rpmbuild/RPMS -type f -name "mlnx-ofa_kernel-modules-[0-9]*.x86_64.rpm")
 if [ -n $mlnx_ofa_kernel_modules ] && [ -f $mlnx_ofa_kernel_modules ];then
@@ -153,62 +113,12 @@ else
 fi
 echo " -------- successfully found standard kernel rpm and related kernel modules --------"
 echo ""
-echo ""
-echo " -------- start to search realtime kernel rpm and related kernel modules --------"
-echo "--> find realtime kernel rpm"
-rt_kernel=$(find $MY_BUILD_DIR/export/dist/isolinux/Packages/ -type f -name "kernel-rt-[0-9]*.rpm")
-if [ -n $rt_kernel ] && [ -f $rt_kernel ];then
-    cp -f $rt_kernel $kernel_rpms_rt/.
-else
-    echo "ERROR: failed to find realtime kernel RPM!"
-    exit -1
-fi
-
-echo "--> find realtime e1000e kernel module"
-rt_e1000e_module=$(find $MY_BUILD_DIR/rt/rpmbuild/RPMS -type f -name "kmod-e1000e-rt-[0-9]*.x86_64.rpm")
-if [ -n $rt_e1000e_module ] && [ -f $rt_e1000e_module ];then
-    cp -f $rt_e1000e_module $kernel_rpms_rt/.
-else
-    echo "ERROR: failed to find realtime e1000e kernel module RPM!"
-    exit -1
-fi
-
-echo "--> find realtime i40e kernel module"
-rt_i40e_module=$(find $MY_BUILD_DIR/rt/rpmbuild/RPMS -type f -name "kmod-i40e-rt-[0-9]*.x86_64.rpm")
-if [ -n $rt_i40e_module ] && [ -f $rt_i40e_module ];then
-    cp -f $rt_i40e_module $kernel_rpms_rt/.
-else
-    echo "ERROR: failed to find realtime i40e kernel module RPM!"
-    exit -1
-fi
-
-echo "--> find realtime ixgbe kernel module"
-rt_ixgbe_module=$(find $MY_BUILD_DIR/rt/rpmbuild/RPMS -type f -name "kmod-ixgbe-rt-[0-9]*.x86_64.rpm")
-if [ -n $rt_ixgbe_module ] && [ -f $rt_ixgbe_module ];then
-    cp -f $rt_ixgbe_module $kernel_rpms_rt/.
-else
-    echo "ERROR: failed to find realtime ixgbe kernel module RPM!"
-    exit -1
-fi
-
-echo "--> find realtime tpm kernel module"
-rt_tpm_module=$(find $MY_BUILD_DIR/rt/rpmbuild/RPMS -type f -name "kmod-tpm-rt-[0-9]*.x86_64.rpm")
-if [ -n $rt_tpm_module ] && [ -f $rt_tpm_module ];then
-    cp -f $rt_tpm_module $kernel_rpms_rt/.
-else
-    echo "ERROR: failed to find realtime tpm kernel module RPM!"
-    exit -1
-fi
 
 rootfs_rpms="$pxe_network_installer_dir/rootfs-rpms"
 if [ -d $rootfs_rpms ];then
     mv $rootfs_rpms $rootfs_rpms-bak-$timestamp
 fi
 mkdir -p $rootfs_rpms
-
-
-echo " -------- successfully found realtime kernel rpm and related kernel modules --------"
-echo ""
 
 echo " step 3:  start to search rpms for rootfs"
 echo "--> find anaconda rpm"
@@ -229,33 +139,6 @@ else
     exit -1
 fi
 
-echo "--> find anaconda-debuginfo rpm"
-anaconda_debuginfo=$(find $MY_BUILD_DIR/installer/rpmbuild/RPMS -type f -name "anaconda-debuginfo-[0-9]*.x86_64.rpm")
-if [ -n $anaconda_debuginfo ] && [ -f $anaconda_debuginfo ];then
-    cp -f $anaconda_debuginfo $rootfs_rpms/.
-else
-    echo "ERROR: failed to find anaconda-debuginfo RPM!"
-    exit -1
-fi
-
-echo "--> find anaconda-dracut rpm"
-anaconda_dracut=$(find $MY_BUILD_DIR/installer/rpmbuild/RPMS -type f -name "anaconda-dracut-[0-9]*.x86_64.rpm")
-if [ -n $anaconda_dracut ] && [ -f $anaconda_dracut ];then
-    cp -f $anaconda_dracut $rootfs_rpms/.
-else
-    echo "ERROR: failed to find anaconda-dracut RPM!"
-    exit -1
-fi
-
-echo "--> find anaconda-gui rpm"
-anaconda_gui=$(find $MY_BUILD_DIR/installer/rpmbuild/RPMS -type f -name "anaconda-gui-[0-9]*.x86_64.rpm")
-if [ -n $anaconda_gui ] && [ -f $anaconda_gui ];then
-    cp -f $anaconda_gui $rootfs_rpms/.
-else
-    echo "ERROR: failed to find anaconda-gui RPM!"
-    exit -1
-fi
-
 echo "--> find anaconda-tui rpm"
 anaconda_tui=$(find $MY_BUILD_DIR/installer/rpmbuild/RPMS -type f -name "anaconda-tui-[0-9]*.x86_64.rpm")
 if [ -n $anaconda_tui ] && [ -f $anaconda_tui ];then
@@ -271,15 +154,6 @@ if [ -n $anaconda_widgets ] && [ -f $anaconda_widgets ];then
     cp -f $anaconda_widgets $rootfs_rpms/.
 else
     echo "ERROR: failed to find anaconda-widgets RPM!"
-    exit -1
-fi
-
-echo "--> find anaconda-widgets-devel rpm"
-anaconda_widgets_devel=$(find $MY_BUILD_DIR/installer/rpmbuild/RPMS -type f -name "anaconda-widgets-devel-[0-9]*.x86_64.rpm")
-if [ -n $anaconda_widgets_devel ] && [ -f $anaconda_widgets_devel ];then
-    cp -f $anaconda_widgets_devel $rootfs_rpms/.
-else
-    echo "ERROR: failed to find anaconda-widgets-devel RPM!"
     exit -1
 fi
 
@@ -364,6 +238,15 @@ else
     exit -1
 fi
 
+echo "--> find lz4 rpm"
+lz4_rpm=$(find $MY_BUILD_DIR/export/dist/isolinux/Packages -type f -name "lz4-[0-9]*.x86_64.rpm")
+if [ -n $lz4_rpm ] && [ -f $lz4_rpm ];then
+    cp -f $lz4_rpm $rootfs_rpms/.
+else
+    echo "ERROR: failed to find lz4_rpm RPM!"
+    exit -1
+fi
+
 echo "--> find bind-utils rpm"
 bind_utils=$(find $MY_BUILD_DIR/export/dist/isolinux/Packages -type f -name "bind-utils-[0-9]*.x86_64.rpm")
 if [ -n $bind_utils ] && [ -f $bind_utils ];then
@@ -386,11 +269,7 @@ echo " ---------------- successfully found rpms for rootfs ---------------------
 echo "step 4: make installer images in this work dir"
 same_folder="$(dirname ${BASH_SOURCE[0]})"
 mk_images_tool="$same_folder/make-installer-images.sh"
-if [ $kernel_mode -eq 0 ];then
-    sudo $mk_images_tool $pxe_network_installer_dir "std"
-else
-    sudo $mk_images_tool $pxe_network_installer_dir "rt"
-fi
+sudo $mk_images_tool $pxe_network_installer_dir
 
 cd $cur_dir
 echo "updating pxe-network-installer images -- done!"
