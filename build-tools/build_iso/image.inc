@@ -10,6 +10,7 @@ isomd5sum
 python2-aodhclient
 python2-oslo-log
 python2-six
+python2-future
 python-d2to1
 hiera
 python2-pecan
