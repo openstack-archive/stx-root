@@ -174,7 +174,7 @@ find_targets () {
    local x=""
    local name=""
    local path=""
-   local RESULT=" "
+   local RESULT="$EMPTY_TARGETS"
    local FOUND=0
 
    for d in $GIT_LIST; do
@@ -234,11 +234,7 @@ find_targets () {
       fi
    done
 
-   if [ "$RESULT" == " " ]; then
-       echo "$EMPTY_LIST"
-   else
-       echo "$RESULT"
-   fi
+   echo "$RESULT"
    return 0
 }
 
