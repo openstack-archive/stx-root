@@ -30,7 +30,7 @@ source $BUILD_SRPMS_SERIAL_DIR/git-utils.sh
 source $BUILD_SRPMS_SERIAL_DIR/spec-utils
 source $BUILD_SRPMS_SERIAL_DIR/srpm-utils
 source $BUILD_SRPMS_SERIAL_DIR/classify
-source $BUILD_SRPMS_PARALLEL_DIR/build-srpms-common.sh
+source $BUILD_SRPMS_SERIAL_DIR/build-srpms-common.sh
 
 
 INITIAL_DIR=$(pwd)
