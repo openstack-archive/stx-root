@@ -727,7 +727,7 @@ build_avoidance_fixups () {
     for rpm_path_post_signing in $(find $MY_WS_BT/rpmbuild/RPMS -type f -name '*.rpm' | grep -v src.rpm); do
 
         rpm_name=$(basename $rpm_path_post_signing)
-        rpm_path_pre_signing=$(find $MY_WS_BT/results -name $b | head -n1)
+        rpm_path_pre_signing=$(find $MY_WS_BT/results -name $rpm_name | head -n1)
         if [ "$rpm_path_pre_signing" != "" ]; then
             md5sum_post_signing=$(md5sum ${rpm_path_post_signing} | cut -d ' ' -f 1)
             md5sum_pre_signing=$(md5sum ${rpm_path_pre_signing} | cut -d ' ' -f 1)
