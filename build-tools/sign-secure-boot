@@ -172,7 +172,7 @@ function update_repo
 }
 
 # sign_shims - find and sign any shim package that we need
-#              Note that shim might produce a "shim-unsigned-[verison-release]
+#              Note that shim might produce a "shim-unsigned-[version-release]
 #              package (old shim) or shim-unsigned-x64-[v-r] &
 #              shim-unsigned-ia32 package (new shim).  In the case of new shim,
 #              we must do x64 only, and not ia32.
