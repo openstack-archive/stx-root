@@ -7,16 +7,14 @@
 #
 # The second way is explicitly name packages that contain SDK content.  This
 # works well for packages which only contain SDK content.  The other reason
-# that calling out packages explcitly may be of use is that some packages
-# (like restapi-doc) may not be built automatically because they get caught
-# in the blacklist filter (i.e. we normally don't build restapi-doc because
-# it contains "doc").
+# that calling out packages explicitly may be of use is that some packages
+# may not be built automatically because they get caught in the blacklist
+# filter.
 
 EXPLICIT_PACKAGES=( \
 	wrs-branding \
 	wrs-heat-templates \
 	install-log-server \
-	restapi-doc \
 	remote-clients \
 	)
 
@@ -35,7 +33,6 @@ PATTERNS=(wrs-branding*.x86_64.rpm \
 	wrs-heat-templates*.x86_64.rpm \
 	*cgts-sdk*.x86_64.rpm  \
 	install-log-server*.x86_64.rpm \
-	restapi-doc*.x86_64.rpm \
 	remote-clients*.x86_64.rpm )
 
 rm -f $SDKTMPFILE
