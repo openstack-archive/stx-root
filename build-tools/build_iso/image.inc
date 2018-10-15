@@ -42,6 +42,7 @@ smartmontools
 collectd
 puppet-collectd
 socat
+strongswan
 
 # for realtime kernel
 rtctl
