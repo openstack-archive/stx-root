@@ -152,7 +152,7 @@ md5sums_from_input_vars () {
         fi
     )
     if [ $? -eq 1 ]; then
-        return -1
+        return 1
     fi
 
     # Create sorted, unique list of cononical paths

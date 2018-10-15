@@ -662,6 +662,7 @@ build_dir_srpm () {
       fi
 
       if [ -d "$FULL_BUILD_DIR/SRPMS" ]; then
+         b=""
          for SRPM_PATH in $(find "$FULL_BUILD_DIR/SRPMS" -name '*.src.rpm' | sort -V); do
             b=$(basename $SRPM_PATH)
             SRPM_OUT_PATH2=$(find $SRPM_OUT -name $b)
@@ -670,6 +671,11 @@ build_dir_srpm () {
                BUILD_NEEDED=1
             fi
          done
+
+         if [ "$b" == "" ]; then
+            echo "Rebuild required due no src.rpm in directory: '$FULL_BUILD_DIR/SRPMS'"
+            BUILD_NEEDED=1
+         fi
       else
          echo "Rebuild required due to missing directory: '$FULL_BUILD_DIR/SRPMS'"
          BUILD_NEEDED=1
@@ -971,14 +977,25 @@ build_dir_spec () {
          fi
 
          if [ -d "$FULL_BUILD_DIR/SRPMS" ]; then
-            for SRPM_PATH2 in $(find "$RPMBUILD_BASE/SRPMS" -name '*.src.rpm' | sort -V); do
-               b=$(basename $SRPM_PATH2)
-               SRPM_OUT_PATH2=$(find $SRPM_OUT -name $b)
-               if [ "x$SRPM_OUT_PATH2" == "x" ]; then
-                  echo "Rebuild required due to missing srpm: $b"
-                  BUILD_NEEDED=1
+            if [ -d "$RPMBUILD_BASE/SRPMS" ]; then
+               b=""
+               for SRPM_PATH2 in $(find "$RPMBUILD_BASE/SRPMS" -name '*.src.rpm' | sort -V); do
+                  b=$(basename $SRPM_PATH2)
+                  SRPM_OUT_PATH2=$(find $SRPM_OUT -name $b)
+                  if [ "x$SRPM_OUT_PATH2" == "x" ]; then
+                     echo "Rebuild required due to missing srpm: $b"
+                     BUILD_NEEDED=1
+                  fi
+               done
+
+               if [ "$b" == "" ]; then
+                   echo "Rebuild required due no src.rpm found in directory: '$RPMBUILD_BASE/SRPMS'"
+                   BUILD_NEEDED=1
                fi
-            done
+            else
+               echo "Rebuild required due to missing directory: '$RPMBUILD_BASE/SRPMS'"
+               BUILD_NEEDED=1
+            fi
          else
             echo "Rebuild required due to missing directory: '$FULL_BUILD_DIR/SRPMS'"
             BUILD_NEEDED=1
