@@ -165,7 +165,7 @@ def file_search(dir, pattern, recursive_depth=0):
     for file in os.listdir(dir):
         path = "%s/%s" % (dir, file)
         if fnmatch.fnmatch(file, pattern):
-            print path
+            print(path)
             match_list.append(path)
         elif (recursive_depth > 0) and os.path.isdir(path):
             sub_list = []
@@ -192,7 +192,7 @@ def get_repo_primary_data_list(rpm_type='RPM', arch_list=default_arch_list):
                 sub_list = file_search(d, 'repodata', 5)
                 rpm_repodata_roots.extend(sub_list)
     else:
-        print "invalid rpm_type '%s', valid types are %s" % (rpm_type, str(rpm_types))
+        print("invalid rpm_type '%s', valid types are %s" % (rpm_type, str(rpm_types)))
         return repodata_list
 
     for d in rpm_repodata_roots:
@@ -262,7 +262,7 @@ def read_data_from_filelists_xml_gz(repodata_path, rpm_type='RPM', arch=default_
             version=v.get('ver')
             release=v.get('rel')
         else:
-            print "%s: %s.%s has no 'filelists:version'" % (repodata_path, name, pkg_arch)
+            print("%s: %s.%s has no 'filelists:version'" % (repodata_path, name, pkg_arch))
 
         # print "%s  %s  %s  %s  " % (name, pkg_arch, version,  release)
 
@@ -317,13 +317,13 @@ def read_data_from_primary_xml_gz(repodata_path, rpm_type='RPM', arch=default_ar
             version=v.get('ver')
             release=v.get('rel')
         else:
-            print "%s: %s.%s has no 'root:version'" % (repodata_path, name, pkg_arch)
+            print("%s: %s.%s has no 'root:version'" % (repodata_path, name, pkg_arch))
 
         fn="%s-%s-%s.%s.rpm" % (name, version, release, arch)
         pkg_data[rpm_type]['fn_to_name'][fn]=name
 
         # SAL print "%s  %s  %s  %s  " % (name, pkg_arch, version,  release)
-        print "%s  %s  %s  %s  " % (name, pkg_arch, version,  release)
+        print("%s  %s  %s  %s  " % (name, pkg_arch, version,  release))
         f=pkg.find('root:format', ns)
         if f is not None:
             license=f.find('rpm:license', ns).text
@@ -331,7 +331,7 @@ def read_data_from_primary_xml_gz(repodata_path, rpm_type='RPM', arch=default_ar
             if sourcerpm != "":
                 pkg_data[rpm_type]['sourcerpm'][name] = sourcerpm
             # SAL print "--- requires ---"
-            print "--- requires ---"
+            print("--- requires ---")
             r=f.find('rpm:requires', ns)
             if r is not None:
                 for rr in r.findall('rpm:entry', ns):
@@ -340,7 +340,7 @@ def read_data_from_primary_xml_gz(repodata_path, rpm_type='RPM', arch=default_ar
                     print "    %s" % required_name
                     pkg_data[rpm_type]['requires'][name].append(required_name)
             else:
-                print "%s: %s.%s has no 'rpm:requires'" % (repodata_path, name, pkg_arch)
+                print("%s: %s.%s has no 'rpm:requires'" % (repodata_path, name, pkg_arch))
             # print "--- provides ---"
             p=f.find('rpm:provides', ns)
             if p is not None:
@@ -355,7 +355,7 @@ def read_data_from_primary_xml_gz(repodata_path, rpm_type='RPM', arch=default_ar
                             continue
                     pkg_data[rpm_type]['providers'][provided_name]=name
             else:
-                print "%s: %s.%s has no 'rpm:provides'" % (repodata_path, name, pkg_arch)
+                print("%s: %s.%s has no 'rpm:provides'" % (repodata_path, name, pkg_arch))
             # print "--- files ---"
             for fn in f.findall('root:file', ns):
                file_name=fn.text
@@ -369,7 +369,7 @@ def read_data_from_primary_xml_gz(repodata_path, rpm_type='RPM', arch=default_ar
                        continue
                pkg_data[rpm_type]['file_owners'][file_name]=name
         else:
-            print "%s: %s.%s has no 'root:format'" % (repodata_path, name, pkg_arch)
+            print("%s: %s.%s has no 'root:format'" % (repodata_path, name, pkg_arch))
         # print "%s  %s  %s  %s  %s" % (name, pkg_arch, version,  release, license)
     infile.close
     
@@ -379,13 +379,13 @@ def calulate_all_direct_requires_and_descendants(rpm_type='RPM'):
         calulate_pkg_direct_requires_and_descendants(name, rpm_type=rpm_type)
 
 def calulate_pkg_direct_requires_and_descendants(name, rpm_type='RPM'):
-    print "%s needs:" % name
+    print("%s needs:" % name)
     if not rpm_type in pkg_data:
-        print "Error: unknown rpm_type '%s'" % rpm_type
+        print("Error: unknown rpm_type '%s'" % rpm_type)
         return
 
     if not name in pkg_data[rpm_type]['requires']:
-        print "Note: No requires data for '%s'" % name
+        print("Note: No requires data for '%s'" % name)
         return
 
     for req in pkg_data[rpm_type]['requires'][name]:
@@ -397,7 +397,7 @@ def calulate_pkg_direct_requires_and_descendants(name, rpm_type='RPM'):
                 pro = pkg_data[rpm_type]['file_owners'][req]
             else:
                 pro = '???'
-                print "package %s has unresolved requirement '%s'" % (name, req)
+                print("package %s has unresolved requirement '%s'" % (name, req))
         else:
             #  i.e. rpm_type == 'SRPM'
             rpm_pro = '???'
@@ -407,7 +407,7 @@ def calulate_pkg_direct_requires_and_descendants(name, rpm_type='RPM'):
                 rpm_pro = pkg_data['RPM']['file_owners'][req]
             else:
                 rpm_pro = '???'
-                print "package %s has unresolved requirement '%s'" % (name, req)
+                print("package %s has unresolved requirement '%s'" % (name, req))
 
             if rpm_pro is not None and rpm_pro != '???':
                 if not name in pkg_data[rpm_type]['pkg_direct_requires_rpm']:
@@ -421,10 +421,10 @@ def calulate_pkg_direct_requires_and_descendants(name, rpm_type='RPM'):
                         pro = pkg_data['SRPM']['fn_to_name'][fn]
                     else:
                         pro = '???'
-                        print "package %s requires srpm file name %s" % (name,fn)
+                        print("package %s requires srpm file name %s" % (name,fn))
                 else:
                     pro = '???'
-                    print "package %s requires rpm %s, but that rpm has no known srpm" % (name,rpm_pro)
+                    print("package %s requires rpm %s, but that rpm has no known srpm" % (name,rpm_pro))
 
         if pro is not None and pro != '???':
             if not name in pkg_data[rpm_type]['pkg_direct_requires']:
@@ -436,7 +436,7 @@ def calulate_pkg_direct_requires_and_descendants(name, rpm_type='RPM'):
             if not name in pkg_data[rpm_type]['pkg_direct_descendants'][pro]:
                 pkg_data[rpm_type]['pkg_direct_descendants'][pro].append(name)
 
-        print "    %s -> %s" % (req, pro)
+        print("    %s -> %s" % (req, pro))
 
 
 
@@ -446,11 +446,11 @@ def calulate_all_transitive_requires(rpm_type='RPM'):
 
 def calulate_pkg_transitive_requires(name, rpm_type='RPM'):
     if not rpm_type in pkg_data:
-        print "Error: unknown rpm_type '%s'" % rpm_type
+        print("Error: unknown rpm_type '%s'" % rpm_type)
         return
 
     if not name in pkg_data[rpm_type]['pkg_direct_requires']:
-        print "Note: No direct_requires data for '%s'" % name
+        print("Note: No direct_requires data for '%s'" % name)
         return
 
     pkg_data[rpm_type]['pkg_transitive_requires'][name]=[]
@@ -482,7 +482,7 @@ def calulate_pkg_transitive_requires(name, rpm_type='RPM'):
                             if rpm_type == 'RPM':
                                 unresolved.append(r)
                             else:
-                                print "WARNING: calulate_pkg_transitive_requires: can't append rpm to SRPM list, name=%s, r=%s" % (name, r)
+                                print("WARNING: calulate_pkg_transitive_requires: can't append rpm to SRPM list, name=%s, r=%s" % (name, r))
                             # print "%s: add %s" % (name, r)
     if rpm_type != 'RPM':
         for r in pkg_data[rpm_type]['pkg_transitive_requires_rpm'][name]:
@@ -492,9 +492,9 @@ def calulate_pkg_transitive_requires(name, rpm_type='RPM'):
                     s = pkg_data['SRPM']['fn_to_name'][fn]
                     pkg_data[rpm_type]['pkg_transitive_requires'][name].append(s)
                 else:
-                    print "package %s requires srpm file name %s, but srpm name is not known" % (name, fn)
+                    print("package %s requires srpm file name %s, but srpm name is not known" % (name, fn))
             else:
-                print "package %s requires rpm %s, but that rpm has no known srpm" % (name, r)
+                print("package %s requires rpm %s, but that rpm has no known srpm" % (name, r))
 
 def calulate_all_transitive_descendants(rpm_type='RPM'):
     for name in pkg_data[rpm_type]['pkg_direct_descendants']:
@@ -502,11 +502,11 @@ def calulate_all_transitive_descendants(rpm_type='RPM'):
 
 def calulate_pkg_transitive_descendants(name, rpm_type='RPM'):
     if not rpm_type in pkg_data:
-        print "Error: unknown rpm_type '%s'" % rpm_type
+        print("Error: unknown rpm_type '%s'" % rpm_type)
         return
 
     if not name in pkg_data[rpm_type]['pkg_direct_descendants']:
-        print "Note: No direct_requires data for '%s'" % name
+        print("Note: No direct_requires data for '%s'" % name)
         return
 
     pkg_data[rpm_type]['pkg_transitive_descendants'][name]=[]
@@ -541,9 +541,9 @@ def create_dest_rpm_data():
 
 def create_cache(cache_dir):
     for rpm_type in rpm_types:
-        print ""
-        print "==== %s ====" % rpm_type
-        print ""
+        print("")
+        print("==== %s ====" % rpm_type)
+        print("")
         rpm_repodata_primary_list = get_repo_primary_data_list(rpm_type=rpm_type, arch_list=default_arch_by_type[rpm_type])
         for arch in default_arch_by_type[rpm_type]:
             read_data_from_repodata_primary_list(rpm_repodata_primary_list, rpm_type=rpm_type, arch=arch)
@@ -557,7 +557,7 @@ def create_cache(cache_dir):
         cache_name="%s/%s-direct-requires" % (cache_dir, rpm_type)
         f=open(cache_name, "w")
         for name in sorted(pkg_data[rpm_type]['pkg_direct_requires']):
-            print "%s needs %s" % (name, pkg_data[rpm_type]['pkg_direct_requires'][name])
+            print("%s needs %s" % (name, pkg_data[rpm_type]['pkg_direct_requires'][name]))
             f.write("%s;" % name)
             first=True
             for req in sorted(pkg_data[rpm_type]['pkg_direct_requires'][name]):
@@ -572,7 +572,7 @@ def create_cache(cache_dir):
         cache_name="%s/%s-direct-descendants" % (cache_dir, rpm_type)
         f=open(cache_name, "w")
         for name in sorted(pkg_data[rpm_type]['pkg_direct_descendants']):
-            print "%s informs %s" % (name, pkg_data[rpm_type]['pkg_direct_descendants'][name])
+            print("%s informs %s" % (name, pkg_data[rpm_type]['pkg_direct_descendants'][name]))
             f.write("%s;" % name)
             first=True
             for req in sorted(pkg_data[rpm_type]['pkg_direct_descendants'][name]):
@@ -616,7 +616,7 @@ def create_cache(cache_dir):
             cache_name="%s/%s-direct-requires-rpm" % (cache_dir, rpm_type)
             f=open(cache_name, "w")
             for name in sorted(pkg_data[rpm_type]['pkg_direct_requires_rpm']):
-                print "%s needs rpm %s" % (name, pkg_data[rpm_type]['pkg_direct_requires_rpm'][name])
+                print("%s needs rpm %s" % (name, pkg_data[rpm_type]['pkg_direct_requires_rpm'][name]))
                 f.write("%s;" % name)
                 first=True
                 for req in sorted(pkg_data[rpm_type]['pkg_direct_requires_rpm'][name]):
@@ -672,9 +672,9 @@ def create_cache(cache_dir):
     
 def test():
     for rpm_type in rpm_types:
-        print ""
-        print "==== %s ====" % rpm_type
-        print ""
+        print("")
+        print("==== %s ====" % rpm_type)
+        print("")
         rpm_repodata_primary_list = get_repo_primary_data_list(rpm_type=rpm_type, arch_list=default_arch_by_type[rpm_type])
         for arch in default_arch_by_type[rpm_type]:
             read_data_from_repodata_primary_list(rpm_repodata_primary_list, rpm_type=rpm_type, arch=arch)
@@ -686,21 +686,21 @@ def test():
         calulate_all_transitive_descendants(rpm_type=rpm_type)
 
         for name in pkg_data[rpm_type]['pkg_direct_requires']:
-            print "%s needs %s" % (name, pkg_data[rpm_type]['pkg_direct_requires'][name])
+            print("%s needs %s" % (name, pkg_data[rpm_type]['pkg_direct_requires'][name]))
 
         for name in pkg_data[rpm_type]['pkg_direct_descendants']:
-            print "%s informs %s" % (name, pkg_data[rpm_type]['pkg_direct_descendants'][name])
+            print("%s informs %s" % (name, pkg_data[rpm_type]['pkg_direct_descendants'][name]))
 
         for name in pkg_data[rpm_type]['pkg_transitive_requires']:
-            print "%s needs %s" % (name, pkg_data[rpm_type]['pkg_transitive_requires'][name])
-            print ""
+            print("%s needs %s" % (name, pkg_data[rpm_type]['pkg_transitive_requires'][name]))
+            print("")
      
         for name in pkg_data[rpm_type]['pkg_transitive_descendants']:
-            print "%s informs %s" % (name, pkg_data[rpm_type]['pkg_transitive_descendants'][name])
-            print ""
+            print("%s informs %s" % (name, pkg_data[rpm_type]['pkg_transitive_descendants'][name]))
+            print("")
 
 
 if os.path.isdir(publish_cache_dir):
    create_cache(publish_cache_dir)
 else:
-   print "ERROR: Directory not found '%s" % publish_cache_dir
+   print("ERROR: Directory not found '%s" % publish_cache_dir)
