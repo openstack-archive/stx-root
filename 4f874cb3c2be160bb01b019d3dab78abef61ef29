@@ -1,0 +1,11 @@
+Code-Review+2: Al Bailey <al.bailey@windriver.com>
+Code-Review+2: Jason McKenna <jason.mckenna@windriver.com>
+Code-Review-1: XiaojueGuan <guanalbertjone@gmail.com>
+Code-Review+2: Scott Little <scott.little@windriver.com>
+Workflow+1: Scott Little <scott.little@windriver.com>
+Verified+2: Zuul
+Submitted-by: Zuul
+Submitted-at: Mon, 15 Oct 2018 14:51:03 +0000
+Reviewed-on: https://review.openstack.org/597990
+Project: openstack/stx-root
+Branch: refs/heads/master
