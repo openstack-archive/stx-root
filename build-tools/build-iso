@@ -605,7 +605,7 @@ function setup_upgrades_files {
    UPGRADES_DIR="$OUTPUT_DIST_DIR/isolinux/upgrades"
    \rm -rf $UPGRADES_DIR
    \mkdir -p $UPGRADES_DIR
-   \cp "$BSP_FILES_PATH/bsp-files/upgrades/*"  "$UPGRADES_DIR"
+   \cp $BSP_FILES_PATH/upgrades/* $UPGRADES_DIR
    sed -i "s/xxxSW_VERSIONxxx/${PLATFORM_RELEASE}/g" $UPGRADES_DIR/metadata.xml
    chmod +x $UPGRADES_DIR/*.sh
    # Write the version out (used in upgrade scripts - this is the same as SW_VERSION)
