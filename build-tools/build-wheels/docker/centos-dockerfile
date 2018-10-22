@@ -1,0 +1,18 @@
+FROM centos:7.5.1804
+
+ARG OS_RELEASE=pike
+
+# Install the necessary packages for building the python modules.
+# Some of these are dependencies of the specific modules, and could
+# instead be added to the wheels.cfg file in the future.
+RUN yum install -y epel-release centos-release-openstack-queens ;\
+    yum install -y git gcc zip bzip2 unzip \
+                   python python-devel python-pip python-wheel \
+                   wget openldap-devel mariadb mariadb-devel \
+                   libvirt libvirt-devel liberasurecode-devel nss-devel \
+                   systemd-devel ;\
+    pip install --upgrade pip setuptools
+
+COPY docker-build-wheel.sh /
+COPY ${OS_RELEASE}-wheels.cfg /wheels.cfg
+
