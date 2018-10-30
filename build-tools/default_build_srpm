@@ -173,6 +173,13 @@ fi
 TAR_NEEDED=0
 if [ "x$SRC_DIR" != "x" ]; then
     echo "SRC_DIR=$SRC_DIR"
+    if [ ${TAR_NAME}="ceph" ]; then
+        echo "calling ceph make-dist...."
+        ceph_temp=$PWD
+	cd $SRC_DIR
+	./make-dist 13.2.0
+	cd $ceph_temp
+    fi
     if [ -f $TAR_PATH ]; then
         n=`find . -cnewer $TAR_PATH -and ! -path './.git*' \
                                     -and ! -path './build/*' \
@@ -191,7 +198,8 @@ fi
 
 if [ $TAR_NEEDED -gt 0 ]; then
     echo "Creating tar file: $TAR_PATH ..."
-    tar czf  $TAR_PATH $SRC_DIR --exclude '.git*' --exclude 'build' --exclude='.pc' --exclude='patches' --exclude="$SRC_DIR/$DISTRO" --exclude='pbr-*.egg' --transform "s,^$TRANSFORM,$TAR_NAME-$VERSION,"
+    #tar czf  $TAR_PATH $SRC_DIR --exclude '.git*' --exclude 'build' --exclude='.pc' --exclude='patches' --exclude="$SRC_DIR/$DISTRO" --exclude='pbr-*.egg' --transform "s,^$TRANSFORM,$TAR_NAME-$VERSION,"
+    tar czf  $TAR_PATH $SRC_DIR --transform "s,^$TRANSFORM,$TAR_NAME-$VERSION,"
     if [ $? -ne 0 ]; then
 		if [ "x$STAGING" != "x" ]; then
 			popd
