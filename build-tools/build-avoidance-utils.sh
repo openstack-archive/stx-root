@@ -773,6 +773,11 @@ build_avoidance () {
         return 1
     fi
 
+    if [ "$BUILD_TYPE" == "containers" ]; then
+        >&2 echo "build_avoidance: BUILD_TYPE==containers not supported"
+        return 1
+    fi
+
     build_avoidance_pre_clean $BUILD_TYPE
     if [ $? -ne 0 ]; then
         >&2 echo "Error: $FUNCNAME (${LINENO}): build_avoidance_pre_clean $BUILD_TYPE"

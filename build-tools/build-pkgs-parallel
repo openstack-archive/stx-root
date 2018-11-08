@@ -56,12 +56,13 @@ BUILD_AVOIDANCE_FLAG=0
 STD_BUILD=1
 RT_BUILD=1
 INSTALLER_BUILD=0
+CONTAINERS_BUILD=0
 
 export BUILD_AVOIDANCE_URL=""
 
 
 # read the options
-TEMP=$(getopt -o h --long parallel,rt,std,installer,edit,build-avoidance,no-build-avoidance,build-avoidance-dir:,build-avoidance-host:,build-avoidance-user:,build-avoidance-day:,no-meta-patch,no-descendants,no-required,no-build-info,no-autoclean,formal,careful,help,clean,append-log -n 'build-pkgs-parallel' -- "$@")
+TEMP=$(getopt -o h --long parallel,rt,std,installer,containers,edit,build-avoidance,no-build-avoidance,build-avoidance-dir:,build-avoidance-host:,build-avoidance-user:,build-avoidance-day:,no-meta-patch,no-descendants,no-required,no-build-info,no-autoclean,formal,careful,help,clean,append-log -n 'build-pkgs-parallel' -- "$@")
 if [ $? -ne 0 ]; then
     usage
     exit 1
@@ -100,6 +101,7 @@ while true ; do
         --rt)             STD_BUILD=0 ; shift ;;
         --std)            RT_BUILD=0 ; shift ;;
         --installer)      INSTALLER_BUILD=1 ; STD_BUILD=0 ; RT_BUILD=0 ; shift ;;
+        --containers)     INSTALLER_BUILD=0 ; STD_BUILD=0 ; RT_BUILD=0 ; CONTAINERS_BUILD=1 ; shift ;;
         --parallel)       shift ;;
         --)               shift ; break ;;
         *)                usage; exit 1 ;;
@@ -166,6 +168,7 @@ EMPTY_TARGETS="  "
 TARGETS_STD="$EMPTY_TARGETS"
 TARGETS_RT="$EMPTY_TARGETS"
 TARGETS_INSTALLER="$EMPTY_TARGETS"
+TARGETS_CONTAINERS="$EMPTY_TARGETS"
 TARGETS_MISC="$EMPTY_TARGETS"
 
 find_targets () {
@@ -261,11 +264,14 @@ if [ "$TARGETS" != "$EMPTY_TARGETS" ]; then
    TARGETS_RT="$(find_targets centos_pkg_dirs_rt)"
    BUILD_TYPE="installer"
    TARGETS_INSTALLER="$(find_targets centos_pkg_dirs_installer)"
+   BUILD_TYPE="containers"
+   TARGETS_CONTAINERS="$(find_targets centos_pkg_dirs_containers)"
    BUILD_TYPE="$BUILD_TYPE_SAVE"
 
    echo "TARGETS_STD=$TARGETS_STD"
    echo "TARGETS_RT=$TARGETS_RT"
    echo "TARGETS_INSTALLER=$TARGETS_INSTALLER"
+   echo "TARGETS_CONTAINERS=$TARGETS_CONTAINERS"
 
    for x in $TARGETS; do
        if [[ $TARGETS_STD == *" $x "* ]]
@@ -281,7 +287,13 @@ if [ "$TARGETS" != "$EMPTY_TARGETS" ]; then
                    echo "found $x" >> /dev/null;
                    INSTALLER_BUILD=1
                else
-                   TARGETS_MISC+="$x "
+                   if [[ $TARGETS_CONTAINERS == *" $x "* ]]
+                   then
+                       echo "found $x" >> /dev/null;
+                       CONTAINERS_BUILD=1
+                   else
+                       TARGETS_MISC+="$x "
+                   fi
                fi
            fi
        fi
@@ -295,6 +307,7 @@ echo "TARGETS='$TARGETS'"
 echo "TARGETS_STD='$TARGETS_STD'"
 echo "TARGETS_RT='$TARGETS_RT'"
 echo "TARGETS_INSTALLER='$TARGETS_INSTALLER'"
+echo "TARGETS_CONTAINERS='$TARGETS_CONTAINERS'"
 echo "TARGETS_MISC='$TARGETS_MISC'"
 
 if [ $CLEAN_FLAG -eq 1 ]; then
@@ -343,6 +356,19 @@ if [ $CLEAN_FLAG -eq 1 ]; then
       fi
    fi
 
+   if [ $CONTAINERS_BUILD -eq 1 ]; then
+      if [ "$TARGETS" == "$EMPTY_TARGETS" ] || [ "$TARGETS_CONTAINERS" != "$EMPTY_TARGETS" ]; then
+         if [ $EDIT_FLAG -ne 1 ]; then
+            echo "${BUILD_PKGS_PARALLEL_DIR}/build-rpms-serial --containers --clean $EXTRA_ARGS_COMMON $EXTRA_ARGS_RPM $TARGETS_CONTAINERS"
+            ${BUILD_PKGS_PARALLEL_DIR}/build-rpms-serial --containers --clean $EXTRA_ARGS_COMMON $EXTRA_ARGS_RPM $TARGETS_CONTAINERS || exit 1
+         fi
+      fi
+      if [ "$TARGETS" == "$EMPTY_TARGETS" ] || [ "$TARGETS_CONTAINERS" != "$EMPTY_TARGETS" ]; then
+         echo "${BUILD_PKGS_PARALLEL_DIR}/build-srpms-serial --containers --clean $EXTRA_ARGS_COMMON $EXTRA_ARGS_SRPM $TARGETS_CONTAINERS"
+         ${BUILD_PKGS_PARALLEL_DIR}/build-srpms-serial --containers --clean $EXTRA_ARGS_COMMON $EXTRA_ARGS_SRPM $TARGETS_CONTAINERS || exit 1
+      fi
+   fi
+
    exit $?
 fi
 
@@ -364,7 +390,11 @@ function launch_build()
          if [ "$build_type" == "installer" ]; then
             targets="$TARGETS_INSTALLER $TARGETS_MISC"
          else
-            targets="$TARGETS"
+            if [ "$build_type" == "containers" ]; then
+               targets="$TARGETS_CONTAINERS $TARGETS_MISC"
+            else
+               targets="$TARGETS"
+            fi
          fi
       fi
    fi
@@ -461,6 +491,16 @@ if [ $INSTALLER_BUILD -eq 1 ]; then
    fi
 else
    echo "Skipping 'installer' build"
+fi
+
+if [ $CONTAINERS_BUILD -eq 1 ]; then
+   if [ "$TARGETS" == "$EMPTY_TARGETS" ] || [ "$TARGETS_CONTAINERS" != "$EMPTY_TARGETS" ] || [ "$TARGETS_MISC" != "$EMPTY_TARGETS" ]; then
+      launch_build containers
+   else
+      echo "Skipping 'containers' build, no valid targets in list: $TARGETS"
+   fi
+else
+   echo "Skipping 'containers' build"
 fi
 
 # Make sure REFERENCE_BUILD is set to something
