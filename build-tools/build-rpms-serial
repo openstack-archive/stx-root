@@ -1175,7 +1175,7 @@ FORMAL_FLAG=0
 CAREFUL=0
    
 # read the options
-TEMP=$(getopt -o ha::bc: --long serial,std,rt,installer,no-required,no-descendants,no-autoclean,no-build-info,clean,formal,careful,help,arga::,argb,argc: -n "$ME" -- "$@")
+TEMP=$(getopt -o ha::bc: --long serial,std,rt,installer,containers,no-required,no-descendants,no-autoclean,no-build-info,clean,formal,careful,help,arga::,argb,argc: -n "$ME" -- "$@")
 
 if [ $? -ne 0 ]; then
     usage
@@ -1205,6 +1205,7 @@ while true ; do
         --std) BUILD_TYPE=std; shift ;;
         --rt) BUILD_TYPE=rt; shift ;;
         --installer) BUILD_TYPE=installer; shift ;;
+        --containers) BUILD_TYPE=containers; shift ;;
         -h|--help) HELP=1 ; shift ;;
         --clean) CLEAN_FLAG=1 ; shift ;;
         -c|--argc)

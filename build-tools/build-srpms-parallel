@@ -74,19 +74,19 @@ usage () {
     echo ""
     echo "Usage: "
     echo "   Create source rpms:"
-    echo "      $ME [--rt | --std | --installer] [--no-descendants] [--formal] [ list of package names ]"
+    echo "      $ME [--rt | --std | --installer | --containers] [--no-descendants] [--formal] [ list of package names ]"
     echo ""
     echo "   Delete source rpms, and the directories associated with it's creation:"
     echo "   Note: does not clean an edit environment"
-    echo "      $ME --clean [--rt | --std | --installer] [optional list of package names]"
+    echo "      $ME --clean [--rt | --std | --installer | --containers]  [optional list of package names]"
     echo ""
     echo "   Extract an src.rpm into a pair of git trees to aid in editing it's contents,"
     echo "   one for source code and one for metadata such as the spec file."
     echo "   If --no-meta-patch is specified, then WRS patches are omitted."
-    echo "      $ME --edit [--rt | --std | --installer] [--no-meta-patch] [list of package names]"
+    echo "      $ME --edit [--rt | --std | --installer | --containers] [--no-meta-patch] [list of package names]"
     echo ""
     echo "   Delete an edit environment"
-    echo "      $ME --edit --clean [--rt | --std | --installer] [list of package names]"
+    echo "      $ME --edit --clean [--rt | --std | --installer | --containers] [list of package names]"
     echo ""
     echo "   This help page"
     echo "      $ME --help"
@@ -160,7 +160,7 @@ EDIT_FLAG=0
 NO_META_PATCH_FLAG=0
 
 # read the options
-TEMP=$(getopt -o ha::bc: --long parallel,std,rt,installer,no-descendants,no-meta-patch,no-build-info,help,formal,clean,edit,arga::,argb,argc: -n "$ME" -- "$@")
+TEMP=$(getopt -o ha::bc: --long parallel,std,rt,installer,containers,no-descendants,no-meta-patch,no-build-info,help,formal,clean,edit,arga::,argb,argc: -n "$ME" -- "$@")
 
 if [ $? -ne 0 ]; then
     usage
@@ -193,6 +193,7 @@ while true ; do
         --std) BUILD_TYPE_FLAG=1; BUILD_TYPE=std; shift ;;
         --rt) BUILD_TYPE_FLAG=1; BUILD_TYPE=rt; shift ;;
         --installer) BUILD_TYPE=installer; shift ;;
+        --containers) BUILD_TYPE=containers; shift ;;
         --edit) EDIT_FLAG=1 ; shift ;;
         --no-meta-patch) NO_META_PATCH_FLAG=1 ; shift ;;
         --parallel) shift ;;
