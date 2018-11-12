@@ -135,20 +135,20 @@ md5sums_from_input_vars () {
             fi
 
             if [ "x$COPY_LIST_TO_TAR" != "x" ]; then
-                find $(readlink -f "$COPY_LIST_TO_TAR") -type f >> $INPUT_FILES
-                if [ $? -ne 0 ]; then
-                    >&2  echo "ERROR: $FUNCNAME (${LINENO}): find '$COPY_LIST_TO_TAR' -type f"
-                    return 1
-                fi
+                for x in $COPY_LIST_TO_TAR; do
+                    find $(readlink -f $x) -type f >> $INPUT_FILES
+                    if [ $? -ne 0 ]; then
+                        >&2  echo "ERROR: $FUNCNAME (${LINENO}): find '$x' -type f"
+                        return 1
+                    fi
+                done
             fi
         fi
 
         if [ "x$OPT_DEP_LIST" != "x" ]; then
-            find $(readlink -f "$OPT_DEP_LIST") -type f >> $INPUT_FILES 2> /dev/null
-            if [ $? -ne 0 ]; then
-                >&2  echo "ERROR: $FUNCNAME (${LINENO}): find '$OPT_DEP_LIST' -type f"
-                return 1
-            fi
+            for x in $OPT_DEP_LIST; do
+                find $(readlink -f $x) -type f >> $INPUT_FILES 2> /dev/null || true
+            done
         fi
     )
     if [ $? -eq 1 ]; then
