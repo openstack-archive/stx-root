@@ -1,0 +1,10 @@
+Code-Review+2: Scott Little <scott.little@windriver.com>
+Code-Review+1: Don Penney <don.penney@windriver.com>
+Code-Review+2: Saul Wold <sgw@linux.intel.com>
+Workflow+1: Saul Wold <sgw@linux.intel.com>
+Verified+2: Zuul
+Submitted-by: Zuul
+Submitted-at: Mon, 12 Nov 2018 08:48:31 +0000
+Reviewed-on: https://review.openstack.org/614261
+Project: openstack/stx-root
+Branch: refs/heads/master
