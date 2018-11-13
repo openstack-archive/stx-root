@@ -95,9 +95,15 @@ fi
 grep -q "config_opts\['chroot_setup_cmd'\] = 'install @buildsys-build pigz lbzip2 yum'" $FILE || \
     echo "config_opts['chroot_setup_cmd'] = 'install @buildsys-build pigz lbzip2 yum'" >> $FILE
 
+# Special case for containers.
 # rpmbuild_networking is required for invoking helm commands within mock
-grep -q "config_opts\['rpmbuild_networking'\] = True" $FILE || \
+# building containers requires the std repo to be enabled.
+if [ "containers" == "$BUILD_TYPE" ]; then
+    grep -q "config_opts\['rpmbuild_networking'\] = True" $FILE || \
         echo "config_opts['rpmbuild_networking'] = True" >> $FILE
+   sed -i "/^\[local-std\]/,/^\[/ s/enabled=0/enabled=1/" $FILE
+fi
+
 #
 # Read macros from tis.macros to add to the build config file,
 # for use in RPM spec files
