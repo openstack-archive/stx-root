@@ -16,82 +16,49 @@ if [ -z "${MY_WORKSPACE}" -o -z "${MY_REPO}" ]; then
 fi
 
 SUPPORTED_OS_ARGS=('centos')
+OS=centos
+OPENSTACK_RELEASE=pike
+VERSION=$(date --utc '+%Y.%m.%d.%H.%M') # Default version, using timestamp
+PUSH=no
+CLEAN=no
+DOCKER_USER=${USER}
+
+# List of top-level services for images, which should not be listed in upper-constraints.txt
+SKIP_CONSTRAINTS=(
+    ceilometer
+    cinder
+    glance
+    gnocchi
+    heat
+    horizon
+    ironic
+    keystone
+    magnum
+    murano
+    neutron
+    nova
+)
 
 function usage {
     cat >&2 <<EOF
 Usage:
-$(basename $0) [ --os <os> ] [ --push ] [ --user <userid> ] [ --release <release> ]
+$(basename $0)
 
 Options:
     --os:         Specify base OS (valid options: ${SUPPORTED_OS_ARGS[@]})
+    --release:    Openstack release (default: pike)
     --push:       Push to docker repo
     --user:       Docker repo userid
-    --release:    Openstack release (default: pike)
+    --version:    Version for pushed image (if used with --push)
 
 EOF
 }
 
-#
-# Function to get an auth token from docker
-#
-function get_docker_token {
-    local auth_server="auth.docker.io"
-    local registry="registry.docker.io"
-    local scope="repository:${REPO_USER}/${IMAGE_NAME}:pull"
-    curl -k -sSL -X GET "https://${auth_server}/token?service=${registry}&scope=${scope}" \
-        | python -c '
-import sys, yaml, json
-y=yaml.load(sys.stdin.read())
-print y["token"]
-' 2>/dev/null
-}
-
-#
-# Function to query docker for the highest current version
-#
-function get_current_version {
-    local registry_server="registry-1.docker.io"
-    local token=
-    token=$(get_docker_token)
-
-    curl -H "Authorization: Bearer ${token}" -k -sSL -X GET https://${registry_server}/v2/${REPO_USER}/${IMAGE_NAME}/tags/list \
-        | python -c '
-import sys, yaml, json, re
-y=yaml.load(sys.stdin.read())
-print max([float(v) for v in filter(lambda x: re.search(r"\d+\.\d+", x), y["tags"])])
-' 2>/dev/null
-}
-
-#
-# Function to increment the image version above the current docker version
-#
-function increment_version {
-    local CUR_VERSION=
-    CUR_VERSION=$(get_current_version)
-
-    if [ -z "${CUR_VERSION}" ]; then
-        echo "0.1"
-        return
-    fi
-
-    echo "${CUR_VERSION}" | while IFS='.' read x y; do
-        let -i y++
-        echo "${x}.${y}"
-    done
-}
-
-OPTS=$(getopt -o h -l help,os:,push,user:,release: -- "$@")
+OPTS=$(getopt -o h -l help,os:,push,clean,user:,release:,version: -- "$@")
 if [ $? -ne 0 ]; then
     usage
     exit 1
 fi
-
-OS=centos
-OS_RELEASE=pike
-PUSH=no
-REPO_USER=${USER}
-# List of top-level services for images, which should not be listed in upper-constraints.txt
-SKIP_CONSTRAINTS=(ceilometer cinder glance gnocchi heat horizon keystone neutron nova)
 
 eval set -- "${OPTS}"
 
@@ -110,12 +77,20 @@ while true; do
             PUSH=yes
             shift
             ;;
+        --clean)
+            CLEAN=yes
+            shift
+            ;;
         --user)
-            REPO_USER=$2
+            DOCKER_USER=$2
             shift 2
             ;;
         --release)
-            OS_RELEASE=$2
+            OPENSTACK_RELEASE=$2
+            shift 2
+            ;;
+        --version)
+            VERSION=$2
             shift 2
             ;;
         -h | --help )
@@ -144,19 +119,19 @@ if [ ${VALID_OS} -ne 0 ]; then
 fi
 
 # Build the base wheels and retrieve the StarlingX wheels
-${MY_SCRIPT_DIR}/build-base-wheels.sh --os ${OS} --release ${OS_RELEASE}
+${MY_SCRIPT_DIR}/build-base-wheels.sh --os ${OS} --release ${OPENSTACK_RELEASE}
 if [ $? -ne 0 ]; then
     echo "Failure running build-base-wheels.sh" >&2
     exit 1
 fi
 
-${MY_SCRIPT_DIR}/get-stx-wheels.sh --os ${OS} --release ${OS_RELEASE}
+${MY_SCRIPT_DIR}/get-stx-wheels.sh --os ${OS} --release ${OPENSTACK_RELEASE}
 if [ $? -ne 0 ]; then
     echo "Failure running get-stx-wheels.sh" >&2
     exit 1
 fi
 
-BUILD_OUTPUT_PATH=${MY_WORKSPACE}/std/build-wheels-${OS}-${OS_RELEASE}/tarball
+BUILD_OUTPUT_PATH=${MY_WORKSPACE}/std/build-wheels-${OS}-${OPENSTACK_RELEASE}/tarball
 if [ -d ${BUILD_OUTPUT_PATH} ]; then
     # Wipe out the existing dir to ensure there are no stale files
     rm -rf ${BUILD_OUTPUT_PATH}
@@ -164,21 +139,21 @@ fi
 mkdir -p ${BUILD_OUTPUT_PATH}
 cd ${BUILD_OUTPUT_PATH}
 
-IMAGE_NAME=stx-${OS}-${OS_RELEASE}-wheels
+IMAGE_NAME=stx-${OS}-${OPENSTACK_RELEASE}-wheels
 
-TARBALL_FNAME=${MY_WORKSPACE}/std/build-wheels-${OS}-${OS_RELEASE}/${IMAGE_NAME}.tar
+TARBALL_FNAME=${MY_WORKSPACE}/std/build-wheels-${OS}-${OPENSTACK_RELEASE}/${IMAGE_NAME}.tar
 if [ -f ${TARBALL_FNAME} ]; then
     rm -f ${TARBALL_FNAME}
 fi
 
 # Download the global-requirements.txt and upper-constraints.txt files
-wget https://raw.githubusercontent.com/openstack/requirements/stable/${OS_RELEASE}/global-requirements.txt
+wget https://raw.githubusercontent.com/openstack/requirements/stable/${OPENSTACK_RELEASE}/global-requirements.txt
 if [ $? -ne 0 ]; then
     echo "Failed to download global-requirements.txt" >&2
     exit 1
 fi
 
-wget https://raw.githubusercontent.com/openstack/requirements/stable/${OS_RELEASE}/upper-constraints.txt
+wget https://raw.githubusercontent.com/openstack/requirements/stable/${OPENSTACK_RELEASE}/upper-constraints.txt
 if [ $? -ne 0 ]; then
     echo "Failed to download upper-constraints.txt" >&2
     exit 1
@@ -246,34 +221,42 @@ if [ "${PUSH}" = "yes" ]; then
     #
     # Push generated wheels tarball to docker registry
     #
-    VERSION=$(increment_version)
-
-    docker import ${TARBALL_FNAME} $REPO_USER/${IMAGE_NAME}:${VERSION}
+    docker import ${TARBALL_FNAME} ${DOCKER_USER}/${IMAGE_NAME}:${VERSION}
     if [ $? -ne 0 ]; then
         echo "Failed command:" >&2
-        echo "docker import ${TARBALL_FNAME} $REPO_USER/${IMAGE_NAME}:${VERSION}" >&2
+        echo "docker import ${TARBALL_FNAME} ${DOCKER_USER}/${IMAGE_NAME}:${VERSION}" >&2
         exit 1
     fi
 
-    docker tag $REPO_USER/${IMAGE_NAME}:${VERSION} $REPO_USER/${IMAGE_NAME}:latest
+    docker tag ${DOCKER_USER}/${IMAGE_NAME}:${VERSION} ${DOCKER_USER}/${IMAGE_NAME}:latest
     if [ $? -ne 0 ]; then
         echo "Failed command:" >&2
-        echo "docker tag $REPO_USER/${IMAGE_NAME}:${VERSION} $REPO_USER/${IMAGE_NAME}:latest" >&2
+        echo "docker tag ${DOCKER_USER}/${IMAGE_NAME}:${VERSION} ${DOCKER_USER}/${IMAGE_NAME}:latest" >&2
         exit 1
     fi
 
-    docker push $REPO_USER/${IMAGE_NAME}:${VERSION}
+    docker push ${DOCKER_USER}/${IMAGE_NAME}:${VERSION}
     if [ $? -ne 0 ]; then
         echo "Failed command:" >&2
-        echo "docker push $REPO_USER/${IMAGE_NAME}:${VERSION}" >&2
+        echo "docker push ${DOCKER_USER}/${IMAGE_NAME}:${VERSION}" >&2
         exit 1
     fi
 
-    docker push $REPO_USER/${IMAGE_NAME}:latest
+    docker push ${DOCKER_USER}/${IMAGE_NAME}:latest
     if [ $? -ne 0 ]; then
         echo "Failed command:" >&2
-        echo "docker import ${TARBALL_FNAME} $REPO_USER/${IMAGE_NAME}:${VERSION}" >&2
+        echo "docker import ${TARBALL_FNAME} ${DOCKER_USER}/${IMAGE_NAME}:${VERSION}" >&2
         exit 1
+    fi
+
+    if [ "${CLEAN}" = "yes" ]; then
+        echo "Deleting docker images ${DOCKER_USER}/${IMAGE_NAME}:${VERSION} ${DOCKER_USER}/${IMAGE_NAME}:latest"
+        docker image rm ${DOCKER_USER}/${IMAGE_NAME}:${VERSION} ${DOCKER_USER}/${IMAGE_NAME}:latest
+        if [ $? -ne 0 ]; then
+            echo "Failed command:" >&2
+            docker image rm ${DOCKER_USER}/${IMAGE_NAME}:${VERSION} ${DOCKER_USER}/${IMAGE_NAME}:latest
+            exit 1
+        fi
     fi
 fi
 
