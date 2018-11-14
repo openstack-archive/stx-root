@@ -1429,8 +1429,8 @@ srpm_apply_meta_patches () {
    local ff
 
    if [ -d "$PATCH_DIR" ]; then
-      cd $PATCH_DIR
       echo ".gitignore" >> "$META_PATCH_TARGET_DIR/.gitignore"
+      cd $PATCH_DIR
 
       if [ $? -ne 0 ]; then
          echo "ERROR: Failed to cd to '$PATCH_DIR'"
