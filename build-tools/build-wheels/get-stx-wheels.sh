@@ -14,8 +14,9 @@ if [ -z "${MY_WORKSPACE}" -o -z "${MY_REPO}" ]; then
     exit 1
 fi
 
+SUPPORTED_OS_ARGS=('centos')
 OS=centos
-OS_RELEASE=pike
+OPENSTACK_RELEASE=pike
 
 function usage {
     cat >&2 <<EOF
@@ -49,7 +50,7 @@ while true; do
             shift 2
             ;;
         --release)
-            OS_RELEASE=$2
+            OPENSTACK_RELEASE=$2
             shift 2
             ;;
         -h | --help )
@@ -64,7 +65,6 @@ while true; do
 done
 
 # Validate the OS option
-SUPPORTED_OS_ARGS=('centos')
 VALID_OS=1
 for supported_os in ${SUPPORTED_OS_ARGS[@]}; do
     if [ "$OS" = "${supported_os}" ]; then
@@ -81,7 +81,7 @@ fi
 source ${MY_REPO}/build-tools/git-utils.sh
 
 function get_wheels_files {
-    find ${GIT_LIST} -maxdepth 1 -name "${OS}_wheels.inc"
+    find ${GIT_LIST} -maxdepth 1 -name "${OS}_${OPENSTACK_RELEASE}_wheels.inc"
 }
 
 WHEELS_FILES=$(get_wheels_files)
@@ -90,7 +90,7 @@ if [ $(echo -n "$WHEELS_FILES" | wc -l) -eq 0 ]; then
     exit 1
 fi
 
-BUILD_OUTPUT_PATH=${MY_WORKSPACE}/std/build-wheels-${OS}-${OS_RELEASE}/stx
+BUILD_OUTPUT_PATH=${MY_WORKSPACE}/std/build-wheels-${OS}-${OPENSTACK_RELEASE}/stx
 if [ -d ${BUILD_OUTPUT_PATH} ]; then
     # Wipe out the existing dir to ensure there are no stale files
     rm -rf ${BUILD_OUTPUT_PATH}
@@ -103,7 +103,9 @@ declare -a FAILED
 for wheel in $(sed -e 's/#.*//' ${WHEELS_FILES} | sort -u); do
     case $OS in
         centos)
-            wheelfile=${MY_WORKSPACE}/std/rpmbuild/RPMS/${wheel}-[^-]*-[^-]*.rpm
+            # Bash globbing does not handle [^\-] well,
+            # so use grep instead
+            wheelfile=$(ls ${MY_WORKSPACE}/std/rpmbuild/RPMS/${wheel}-* | grep -- '[^\-]*-[^\-]*.rpm')
 
             if [ ! -f ${wheelfile} ]; then
                 echo "Could not find ${wheelfile}" >&2
