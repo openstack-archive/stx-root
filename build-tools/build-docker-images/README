@@ -1,0 +1,34 @@
+## Example commands for building StarlingX images
+
+PRIVATE_REGISTRY_USERID=myuser
+PRIVATE_REGISTRY=xxx.xxx.xxx.xxx
+
+## Step 1: Build stx-centos
+time $MY_REPO/build-tools/build-docker-images/build-stx-base.sh \
+    --version 2018.11.13 \
+    --user ${PRIVATE_REGISTRY_USERID} --registry ${PRIVATE_REGISTRY}:9001 \
+    --push \
+    --repo stx-local-build,http://${HOSTNAME}:8088/localdisk/loadbuild/jenkins/StarlingX_Upstream_build/2018-11-13_20-18-00/std/rpmbuild/RPMS \
+    --repo stx-mirror-distro,http://${HOSTNAME}:8088/localdisk/designer/jenkins/StarlingX_upstream/cgcs-root/cgcs-centos-repo/Binary \
+    --clean
+
+
+## Step 2: Build wheels (output as tarball)
+time $MY_REPO/build-tools/build-wheels/build-wheel-tarball.sh \
+    --os centos \
+    --release pike
+
+## Step 3: Build images
+time $MY_REPO/build-tools/build-docker-images/build-stx-images.sh \
+    --os centos \
+    --base ${PRIVATE_REGISTRY}:9001/${PRIVATE_REGISTRY_USERID}/stx-centos:2018.11.13 \
+    --wheels http://${HOSTNAME}:8088/$MY_WORKSPACE/std/build-wheels-centos-pike/stx-centos-pike-wheels.tar \
+    --user ${PRIVATE_REGISTRY_USERID} --registry ${PRIVATE_REGISTRY}:9001 \
+    --push --latest \
+    --clean
+
+
+## Note: You may need to add an iptables rule to allow the docker
+## containers to access the http server on your host. For example:
+iptables -I INPUT 6 -i docker0 -p tcp --dport 8088 -m state --state NEW,ESTABLISHED -j ACCEPT
+
