@@ -279,7 +279,7 @@ check_vars
 echo signing $_PKG_DIR
 
 # sign all rpms
-if [ "$USER" == "jenkins" ]; then
+if [ "$USER" == "jenkins" ] && [ ! -z "${SIGNING_USER}" ] && [ ! -z "${SIGNING_SERVER}" ] && [ ! -z "${SIGNING_SERVER_SCRIPT}" ]; then
     sign_packages_on_server
     retval=$?
 else
