@@ -154,7 +154,7 @@ RM_OPT=
 if [ "${KEEP_CONTAINER}" = "no" ]; then
     RM_OPT="--rm"
 fi
-docker run ${RM_OPT} -v ${BUILD_OUTPUT_PATH}:/wheels -i -t ${BUILD_IMAGE_NAME} /docker-build-wheel.sh
+docker run ${RM_OPT} -v ${BUILD_OUTPUT_PATH}:/wheels ${BUILD_IMAGE_NAME} /docker-build-wheel.sh
 
 if [ "${KEEP_IMAGE}" = "no" ]; then
     # Delete the builder image
