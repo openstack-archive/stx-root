@@ -815,6 +815,8 @@ raw_create_tarballs_extract_script () {
                 "git add "*|\
                 "git commit "*)
                     ;;
+                "rm -rf "*)
+                    ;;
                 *)
                     echo "$LINE" >> $EXTRACT_SCRIPT
                     ;;
