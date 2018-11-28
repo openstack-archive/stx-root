@@ -1,0 +1,11 @@
+Code-Review+1: Lin Shuicheng <shuicheng.lin@intel.com>
+Code-Review+2: Saul Wold <sgw@linux.intel.com>
+Code-Review+1: Dariush Eslimi <Dariush.Eslimi@windriver.com>
+Code-Review+2: Jason McKenna <jason.mckenna@windriver.com>
+Workflow+1: Jason McKenna <jason.mckenna@windriver.com>
+Verified+2: Zuul
+Submitted-by: Zuul
+Submitted-at: Wed, 28 Nov 2018 15:10:38 +0000
+Reviewed-on: https://review.openstack.org/619746
+Project: openstack/stx-root
+Branch: refs/heads/master
