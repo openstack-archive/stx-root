@@ -147,17 +147,32 @@ if [ -f ${TARBALL_FNAME} ]; then
 fi
 
 # Download the global-requirements.txt and upper-constraints.txt files
-wget https://raw.githubusercontent.com/openstack/requirements/stable/${OPENSTACK_RELEASE}/global-requirements.txt
+if [ "${OPENSTACK_RELEASE}" = "master" ]; then
+    OPENSTACK_BRANCH=${OPENSTACK_RELEASE}
+else
+    OPENSTACK_BRANCH=stable/${OPENSTACK_RELEASE}
+fi
+
+wget https://raw.githubusercontent.com/openstack/requirements/${OPENSTACK_BRANCH}/global-requirements.txt
 if [ $? -ne 0 ]; then
     echo "Failed to download global-requirements.txt" >&2
     exit 1
 fi
 
-wget https://raw.githubusercontent.com/openstack/requirements/stable/${OPENSTACK_RELEASE}/upper-constraints.txt
+wget https://raw.githubusercontent.com/openstack/requirements/${OPENSTACK_BRANCH}/upper-constraints.txt
 if [ $? -ne 0 ]; then
     echo "Failed to download upper-constraints.txt" >&2
     exit 1
 fi
+
+# Delete $SKIP_CONSTRAINTS from upper-constraints.txt, if any present
+for name in ${SKIP_CONSTRAINTS[@]}; do
+    grep -q "^${name}===" upper-constraints.txt
+    if [ $? -eq 0 ]; then
+        # Delete the module
+        sed -i "/^${name}===/d" upper-constraints.txt
+    fi
+done
 
 # Copy the base and stx wheels, updating upper-constraints.txt as necessary
 for wheel in ../base/*.whl ../stx/wheels/*.whl; do

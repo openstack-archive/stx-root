@@ -185,7 +185,7 @@ function build_image_loci {
 
     docker build ${WORKDIR}/loci --no-cache \
         "${BUILD_ARGS[@]}" \
-        --tag ${build_image_name}  2>&1 | tee ${WORKDIR}/docker-${LABEL}.log
+        --tag ${build_image_name}  2>&1 | tee ${WORKDIR}/docker-${LABEL}-${OS}-${OPENSTACK_RELEASE}.log
     if [ ${PIPESTATUS[0]} -ne 0 ]; then
         echo "Failed to build ${LABEL}... Aborting"
         RESULTS_FAILED+=(${LABEL})
@@ -297,7 +297,7 @@ function build_image_docker {
 
     docker build ${docker_src} --no-cache \
         --build-arg "BASE=${BASE}" \
-        --tag ${build_image_name} 2>&1 | tee ${WORKDIR}/docker-${LABEL}.log
+        --tag ${build_image_name} 2>&1 | tee ${WORKDIR}/docker-${LABEL}-${OS}-${OPENSTACK_RELEASE}.log
     if [ ${PIPESTATUS[0]} -ne 0 ]; then
         echo "Failed to build ${LABEL}... Aborting"
         RESULTS_FAILED+=(${LABEL})
