@@ -84,8 +84,8 @@ function get_wheels_files {
     find ${GIT_LIST} -maxdepth 1 -name "${OS}_${OPENSTACK_RELEASE}_wheels.inc"
 }
 
-WHEELS_FILES=$(get_wheels_files)
-if [ $(echo -n "$WHEELS_FILES" | wc -l) -eq 0 ]; then
+declare -a WHEELS_FILES=($(get_wheels_files))
+if [ ${#WHEELS_FILES[@]} -eq 0 ]; then
     echo "Could not find ${OS} wheels.inc files" >&2
     exit 1
 fi
@@ -100,7 +100,7 @@ cd ${BUILD_OUTPUT_PATH}
 
 # Extract the wheels
 declare -a FAILED
-for wheel in $(sed -e 's/#.*//' ${WHEELS_FILES} | sort -u); do
+for wheel in $(sed -e 's/#.*//' ${WHEELS_FILES[@]} | sort -u); do
     case $OS in
         centos)
             # Bash globbing does not handle [^\-] well,

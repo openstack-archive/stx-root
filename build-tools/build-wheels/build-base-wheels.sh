@@ -100,6 +100,11 @@ if [ ! -f ${DOCKER_FILE} ]; then
     exit 1
 fi
 
+if [ ! -f ${WHEELS_CFG} ]; then
+    echo "Required file does not exist: ${WHEELS_CFG}" >&2
+    exit 1
+fi
+
 #
 # Check build output directory for unexpected files,
 # ie. wheels from old builds that are no longer in wheels.cfg
@@ -129,6 +134,45 @@ for wheel in $(cat ${WHEELS_CFG} | sed 's/#.*//' | awk -F '|' '{print $1}'); do
         break
     fi
 done
+
+if [ "${OPENSTACK_RELEASE}" = "master" ]; then
+    # Download the master wheel from loci, so we're only building pieces not covered by it
+    MASTER_WHEELS_IMAGE="loci/requirements:master-${OS}"
+
+    # Check to see if the wheels are already present.
+    # If so, we'll still pull to ensure the image is updated,
+    # but we won't delete it after
+    docker images --format '{{.Repository}}:{{.Tag}}' ${MASTER_WHEELS_IMAGE} | grep -q "^${MASTER_WHEELS_IMAGE}$"
+    MASTER_WHEELS_PRESENT=$?
+
+    docker pull ${MASTER_WHEELS_IMAGE}
+    if [ $? -ne 0 ]; then
+        echo "Failed to pull ${MASTER_WHEELS_IMAGE}" >&2
+        exit 1
+    fi
+
+    # Export the image to a tarball.
+    # The "docker run" will always fail, due to the construct of the wheels image,
+    # so just ignore it
+    docker run --name ${USER}_inspect_wheels ${MASTER_WHEELS_IMAGE} noop 2>/dev/null
+
+    echo "Extracting wheels from ${MASTER_WHEELS_IMAGE}"
+    docker export ${USER}_inspect_wheels | tar x -C ${BUILD_OUTPUT_PATH} '*.whl'
+    if [ ${PIPESTATUS[0]} -ne 0 -o ${PIPESTATUS[1]} -ne 0 ]; then
+        echo "Failed to extract wheels from ${MASTER_WHEELS_IMAGE}" >&2
+        docker rm ${USER}_inspect_wheels
+        if [ ${MASTER_WHEELS_PRESENT} -ne 0 ]; then
+            docker rm ${MASTER_WHEELS_IMAGE}
+        fi
+        exit 1
+    fi
+
+    docker rm ${USER}_inspect_wheels
+
+    if [ ${MASTER_WHEELS_PRESENT} -ne 0 ]; then
+        docker rm ${MASTER_WHEELS_IMAGE}
+    fi
+fi
 
 if [ "${BUILD_NEEDED}" = "no" ]; then
     echo "All base wheels are already present. Skipping build."
