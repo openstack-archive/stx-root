@@ -36,7 +36,7 @@ Options:
 EOF
 }
 
-OPTS=$(getopt -o h -l help,os:,keep-image,keep-container,release: -- "$@")
+OPTS=$(getopt -o h -l help,os:,os-version:,keep-image,keep-container,release: -- "$@")
 if [ $? -ne 0 ]; then
     usage
     exit 1
@@ -83,7 +83,12 @@ while true; do
 done
 
 BUILD_OUTPUT_PATH=${MY_WORKSPACE}/std/build-wheels-${OS}-${OPENSTACK_RELEASE}/base
+
 BUILD_IMAGE_NAME="${USER}-$(basename ${MY_WORKSPACE})-wheelbuilder:${OS}-${OPENSTACK_RELEASE}"
+
+# BUILD_IMAGE_NAME can't have caps if it's passed to docker build -t $BUILD_IMAGE_NAME.
+# The following will substitute caps with lower case.
+BUILD_IMAGE_NAME="${BUILD_IMAGE_NAME,,}"
 
 DOCKER_FILE=${DOCKER_PATH}/${OS}-dockerfile
 WHEELS_CFG=${DOCKER_PATH}/${OPENSTACK_RELEASE}-wheels.cfg
