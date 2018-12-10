@@ -26,6 +26,9 @@ declare -a REPO_LIST
 REPO_OPTS=
 LOCAL=no
 CLEAN=no
+TAG_LATEST=no
+LATEST_TAG=latest
+HOST=${HOSTNAME}
 
 function usage {
     cat >&2 <<EOF
@@ -39,14 +42,17 @@ Options:
     --repo:       Software repository (Format: name,baseurl), can be specified multiple times
     --local:      Use local build for software repository (cannot be used with --repo)
     --push:       Push to docker repo
+    --latest:     Add a 'latest' tag when pushing
+    --latest-tag: Use the provided tag when pushing latest.
     --user:       Docker repo userid
     --registry:   Docker registry
     --clean:      Remove image(s) from local registry
+    --hostname:   build repo host
 
 EOF
 }
 
-OPTS=$(getopt -o h -l help,os:,os-version:,version:,repo:,push,user:,registry:,local,clean -- "$@")
+OPTS=$(getopt -o h -l help,os:,os-version:,version:,repo:,push,latest,latest-tag:,user:,registry:,local,clean,hostname: -- "$@")
 if [ $? -ne 0 ]; then
     usage
     exit 1
@@ -85,6 +91,14 @@ while true; do
             PUSH=yes
             shift
             ;;
+        --latest)
+            TAG_LATEST=yes
+            shift
+            ;;
+        --latest-tag)
+            LATEST_TAG=$2
+            shift 2
+            ;;
         --user)
             DOCKER_USER=$2
             shift 2
@@ -97,6 +111,10 @@ while true; do
         --clean)
             CLEAN=yes
             shift
+            ;;
+        --hostname)
+            HOST=$2
+            shift 2
             ;;
         -h | --help )
             usage
@@ -130,8 +148,8 @@ fi
 if [ ${#REPO_LIST[@]} -eq 0 ]; then
     # Either --repo or --local must be specified
     if [ "${LOCAL}" = "yes" ]; then
-        REPO_LIST+=("local-std,http://${HOSTNAME}:8088${MY_WORKSPACE}/std/rpmbuild/RPMS")
-        REPO_LIST+=("stx-distro,http://${HOSTNAME}:8088${MY_REPO}/cgcs-centos-repo/Binary")
+        REPO_LIST+=("local-std,http://${HOST}:8088${MY_WORKSPACE}/std/rpmbuild/RPMS")
+        REPO_LIST+=("stx-distro,http://${HOST}:8088${MY_REPO}/cgcs-${OS}-repo/Binary")
     else
         echo "Either --local or --repo must be specified" >&2
         exit 1
@@ -191,6 +209,7 @@ BASE_IMAGE_PRESENT=$?
 
 # Build the image
 IMAGE_NAME=${DOCKER_REGISTRY}${DOCKER_USER}/stx-${OS}:${IMAGE_VERSION}
+IMAGE_NAME_LATEST=${DOCKER_REGISTRY}${DOCKER_USER}/stx-${OS}:${LATEST_TAG}
 
 docker build \
     --build-arg RELEASE=${OS_VERSION} \
@@ -208,6 +227,16 @@ if [ "${PUSH}" = "yes" ]; then
     if [ $? -ne 0 ]; then
         echo "Failed running docker push command" >&2
         exit 1
+    fi
+
+    if [ "$TAG_LATEST" = "yes" ]; then
+        docker tag ${IMAGE_NAME} ${IMAGE_NAME_LATEST}
+        echo "Pushing image: ${IMAGE_NAME_LATEST}"
+        docker push ${IMAGE_NAME_LATEST}
+        if [ $? -ne 0 ]; then
+            echo "Failed running docker push command on latest" >&2
+            exit 1
+        fi
     fi
 fi
 
