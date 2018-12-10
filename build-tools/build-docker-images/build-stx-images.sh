@@ -21,13 +21,15 @@ SUPPORTED_OS_ARGS=('centos')
 OS=centos
 OPENSTACK_RELEASE=pike
 IMAGE_VERSION=$(date --utc '+%Y.%m.%d.%H.%M') # Default version, using timestamp
-RELEASE=dev
+PREFIX=dev
+LATEST_PREFIX=""
 PUSH=no
 DOCKER_USER=${USER}
 DOCKER_REGISTRY=
 BASE=
 WHEELS=
 CLEAN=no
+TAG_LATEST=no
 declare -a ONLY
 declare -a SKIP
 
@@ -45,6 +47,9 @@ Options:
     --push:       Push to docker repo
     --user:       Docker repo userid
     --registry:   Docker registry
+    --prefix:     Prefix on the image tag (default: dev)
+    --latest:     Add a 'latest' tag when pushing
+    --latest-prefix: Alternative prefix on the latest image tag
     --clean:      Remove image(s) from local registry
     --only <image> : Only build the specified image(s). Multiple images
                      can be specified with a comma-separated list, or with
@@ -344,7 +349,7 @@ function build_image {
     esac
 }
 
-OPTS=$(getopt -o h -l help,os:,version:,release:,push,user:,registry:,release:,base:,wheels:,only:,skip:,latest,clean -- "$@")
+OPTS=$(getopt -o h -l help,os:,version:,release:,push,user:,registry:,release:,base:,wheels:,only:,skip:,prefix:,latest,latest-prefix:,clean -- "$@")
 if [ $? -ne 0 ]; then
     usage
     exit 1
@@ -377,6 +382,14 @@ while true; do
             ;;
         --release)
             OPENSTACK_RELEASE=$2
+            shift 2
+            ;;
+        --prefix)
+            PREFIX=$2
+            shift 2
+            ;;
+        --latest-prefix)
+            LATEST_PREFIX=$2
             shift 2
             ;;
         --push)
@@ -445,9 +458,24 @@ if [ -z "${BASE}" ]; then
     exit 1
 fi
 
-IMAGE_TAG_BUILD="${RELEASE}-${OS}-${OPENSTACK_RELEASE}-build"
-IMAGE_TAG="${RELEASE}-${OS}-${OPENSTACK_RELEASE}-${IMAGE_VERSION}"
-IMAGE_TAG_LATEST="${RELEASE}-${OS}-${OPENSTACK_RELEASE}-latest"
+IMAGE_TAG="${OS}-${OPENSTACK_RELEASE}"
+IMAGE_TAG_LATEST="${IMAGE_TAG}-latest"
+
+if [ -n "${LATEST_PREFIX}" ]; then
+    IMAGE_TAG_LATEST="${LATEST_PREFIX}-${IMAGE_TAG_LATEST}"
+elif [ -n "${PREFIX}" ]; then
+    IMAGE_TAG_LATEST="${PREFIX}-${IMAGE_TAG_LATEST}"
+fi
+
+if [ -n "${PREFIX}" ]; then
+    IMAGE_TAG="${PREFIX}-${IMAGE_TAG}"
+fi
+
+IMAGE_TAG_BUILD="${IMAGE_TAG}-build"
+
+if [ "${IMAGE_VERSION}" != "" ]; then
+    IMAGE_TAG="${IMAGE_TAG}-${IMAGE_VERSION}"
+fi
 
 WORKDIR=${MY_WORKSPACE}/std/build-images
 mkdir -p ${WORKDIR}
