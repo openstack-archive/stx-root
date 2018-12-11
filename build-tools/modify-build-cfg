@@ -92,8 +92,13 @@ if [ -f /usr/lib64/nosync/nosync.so ]; then
         echo "config_opts['nosync'] = True" >> $FILE
 fi
 
-grep -q "config_opts\['chroot_setup_cmd'\] = 'install @buildsys-build pigz lbzip2 yum'" $FILE || \
-    echo "config_opts['chroot_setup_cmd'] = 'install @buildsys-build pigz lbzip2 yum'" >> $FILE
+NETWORK_PKGS=""
+if [ "containers" == "$BUILD_TYPE" ]; then
+    NETWORK_PKGS="bind-utils"
+fi
+
+grep -q "config_opts\['chroot_setup_cmd'\] = 'install @buildsys-build pigz lbzip2 yum $NETWORK_PKGS'" $FILE || \
+    echo "config_opts['chroot_setup_cmd'] = 'install @buildsys-build pigz lbzip2 yum $NETWORK_PKGS'" >> $FILE
 
 # Special case for containers.
 # rpmbuild_networking is required for invoking helm commands within mock
@@ -101,6 +106,10 @@ grep -q "config_opts\['chroot_setup_cmd'\] = 'install @buildsys-build pigz lbzip
 if [ "containers" == "$BUILD_TYPE" ]; then
     grep -q "config_opts\['rpmbuild_networking'\] = True" $FILE || \
         echo "config_opts['rpmbuild_networking'] = True" >> $FILE
+
+    grep -q "config_opts\['use_host_resolv'\] = True" $FILE || \
+        echo "config_opts['use_host_resolv'] = True" >> $FILE
+
    sed -i "/^\[local-std\]/,/^\[/ s/enabled=0/enabled=1/" $FILE
 fi
 
