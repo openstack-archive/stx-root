@@ -17,6 +17,7 @@ fi
 
 SUPPORTED_OS_ARGS=('centos')
 OS=centos
+OS_VERSION=7.5.1804
 OPENSTACK_RELEASE=pike
 VERSION=$(date --utc '+%Y.%m.%d.%H.%M') # Default version, using timestamp
 PUSH=no
@@ -46,6 +47,7 @@ $(basename $0)
 
 Options:
     --os:         Specify base OS (valid options: ${SUPPORTED_OS_ARGS[@]})
+    --os-version:     Specify OS version
     --release:    Openstack release (default: pike)
     --push:       Push to docker repo
     --user:       Docker repo userid
@@ -54,7 +56,7 @@ Options:
 EOF
 }
 
-OPTS=$(getopt -o h -l help,os:,push,clean,user:,release:,version: -- "$@")
+OPTS=$(getopt -o h -l help,os:,os-version:,push,clean,user:,release:,version: -- "$@")
 if [ $? -ne 0 ]; then
     usage
     exit 1
@@ -71,6 +73,10 @@ while true; do
             ;;
         --os)
             OS=$2
+            shift 2
+            ;;
+        --os-version)
+            OS_VERSION=$2
             shift 2
             ;;
         --push)
@@ -119,7 +125,7 @@ if [ ${VALID_OS} -ne 0 ]; then
 fi
 
 # Build the base wheels and retrieve the StarlingX wheels
-${MY_SCRIPT_DIR}/build-base-wheels.sh --os ${OS} --release ${OPENSTACK_RELEASE}
+${MY_SCRIPT_DIR}/build-base-wheels.sh --os ${OS} --os-version ${OS_VERSION} --release ${OPENSTACK_RELEASE}
 if [ $? -ne 0 ]; then
     echo "Failure running build-base-wheels.sh" >&2
     exit 1
