@@ -2013,7 +2013,7 @@ echo "CMD_OPTIONS=$CMD_OPTIONS"
 
 CMD="$CMD_PREFIX mockchain -r $BUILD_CFG -l $BUILD_BASE --recurse --log=$MOCKCHAIN_LOG --tmp_prefix=$USER --addrepo=$LOCAL_URL --addrepo=$LOCAL_SRC_URL -m --rootdir=$BUILD_BASE/mock/root $CMD_OPTIONS -m --rebuild $SRPMS_LIST"
 echo "$CMD -m --define='_tis_dist .tis' -m --define='platform_release $PLATFORM_RELEASE'" 
-trapwrap stdbuf -o0 $CMD -m --define='_tis_dist .tis' -m --define='platform_release $PLATFORM_RELEASE'
+trapwrap stdbuf -o0 $CMD -m --define='_tis_dist .tis' -m --define="platform_release $PLATFORM_RELEASE"
 MOCKCHAIN_RC=$?
 
 echo $PLATFORM_RELEASE > $LAST_PLATFORM_RELEASE_FILE
