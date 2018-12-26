@@ -99,7 +99,7 @@ function sign_packages {
     _MK_DIR=$MY_REPO/build-tools/mk
     _MOCK_MK_DIR=/mnt/mk
 
-    # mock confgiuration file
+    # mock configuration file
     _MOCK_CFG=$MY_BUILD_DIR/${MY_BUILD_ENVIRONMENT}-sign.cfg
 
     # recreate configuration file 
