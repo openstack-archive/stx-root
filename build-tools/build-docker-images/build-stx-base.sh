@@ -249,6 +249,15 @@ if [ "${CLEAN}" = "yes" ]; then
         exit 1
     fi
 
+    if [ "$TAG_LATEST" = "yes" ]; then
+        echo "Deleting image: ${IMAGE_NAME_LATEST}"
+        docker image rm ${IMAGE_NAME_LATEST}
+        if [ $? -ne 0 ]; then
+            echo "Failed running docker image rm command" >&2
+            exit 1
+        fi
+    fi
+
     if [ ${BASE_IMAGE_PRESENT} -ne 0 ]; then
         # The base image was not already present, so delete it
         echo "Removing docker image ${OS}:${OS_VERSION}"
