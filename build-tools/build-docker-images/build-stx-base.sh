@@ -18,6 +18,7 @@ fi
 SUPPORTED_OS_ARGS=('centos')
 OS=centos
 OS_VERSION=7.5.1804
+OPENSTACK_RELEASE=pike
 IMAGE_VERSION=
 PUSH=no
 DOCKER_USER=${USER}
@@ -39,6 +40,7 @@ Options:
     --os:         Specify base OS (valid options: ${SUPPORTED_OS_ARGS[@]})
     --os-version: Specify OS version
     --version:    Specify version for output image
+    --release:    Openstack release (default: pike)
     --repo:       Software repository (Format: name,baseurl), can be specified multiple times
     --local:      Use local build for software repository (cannot be used with --repo)
     --push:       Push to docker repo
@@ -52,7 +54,7 @@ Options:
 EOF
 }
 
-OPTS=$(getopt -o h -l help,os:,os-version:,version:,repo:,push,latest,latest-tag:,user:,registry:,local,clean,hostname: -- "$@")
+OPTS=$(getopt -o h -l help,os:,os-version:,version:,release:,repo:,push,latest,latest-tag:,user:,registry:,local,clean,hostname: -- "$@")
 if [ $? -ne 0 ]; then
     usage
     exit 1
@@ -77,6 +79,10 @@ while true; do
             ;;
         --version)
             IMAGE_VERSION=$2
+            shift 2
+            ;;
+        --release)
+            OPENSTACK_RELEASE=$2
             shift 2
             ;;
         --repo)
@@ -150,7 +156,7 @@ if [ ${#REPO_LIST[@]} -eq 0 ]; then
     if [ "${LOCAL}" = "yes" ]; then
         REPO_LIST+=("local-std,http://${HOST}:8088${MY_WORKSPACE}/std/rpmbuild/RPMS")
         REPO_LIST+=("stx-distro,http://${HOST}:8088${MY_REPO}/cgcs-${OS}-repo/Binary")
-    else
+    elif [ "${OPENSTACK_RELEASE}" != "master" ]; then
         echo "Either --local or --repo must be specified" >&2
         exit 1
     fi
@@ -174,8 +180,8 @@ if [ $? -ne 0 ]; then
 fi
 
 # Get the Dockerfile
-SRC_DOCKERFILE=${MY_SCRIPT_DIR}/stx-${OS}/Dockerfile
-cp ${SRC_DOCKERFILE} ${BUILDDIR}
+SRC_DOCKERFILE=${MY_SCRIPT_DIR}/stx-${OS}/Dockerfile.${OPENSTACK_RELEASE}
+cp ${SRC_DOCKERFILE} ${BUILDDIR}/Dockerfile
 
 # Generate the stx.repo file
 STX_REPO_FILE=${BUILDDIR}/stx.repo

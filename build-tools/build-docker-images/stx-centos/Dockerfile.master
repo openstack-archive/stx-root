@@ -1,0 +1,13 @@
+# Expected build arguments:
+#   RELEASE: centos release
+#
+ARG RELEASE=7.5.1804
+FROM centos:${RELEASE}
+
+RUN set -ex ;\
+    yum install -y centos-release-openstack-rocky ;\
+    rm -rf \
+        /var/log/* \
+        /tmp/* \
+        /var/tmp/*
+
