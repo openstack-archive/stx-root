@@ -706,6 +706,9 @@ if [ "x${RELEASE_BUILD}" == "x" ]; then
     fi
 fi
 
+\cd $OUTPUT_DIST_DIR
+chmod -R 644 isolinux/Packages/*
+
 # Extract installer files
 extract_installer_files
 
