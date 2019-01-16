@@ -76,7 +76,7 @@ Spawning worker 1 with 4 pkgs
 Spawning worker 2 with 4 pkgs
 ...
 
-This is your confirmation that all required pacakges were found and installed
+This is your confirmation that all required packages were found and installed
 on the ISO.  You should also now see a new file called "centosIso.iso":
 
 # ls -l centosIso.iso

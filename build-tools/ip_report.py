@@ -244,7 +244,7 @@ class IPReport(object):
                 else:
                     kmod_string = 'No'
 
-                # Copy the pacakge and get the SHA
+                # Copy the package and get the SHA
                 if copy_packages:
                     if src_pkg.wrs is False:
                         shutil.copyfile(src_pkg.path, output_path + '/non_wrs/' + src_pkg.filename)
