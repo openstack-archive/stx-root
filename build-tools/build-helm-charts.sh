@@ -96,14 +96,7 @@ if [ -z "$(echo -n ${HELM_FILES})" ]; then
     exit 1
 fi
 
-# Build the rpms
-build-pkgs --containers
-if [ $? -ne 0 ]; then
-    echo "Failed build-pkgs --containers" >&2
-    exit 1
-fi
-
-BUILD_OUTPUT_PATH=${MY_WORKSPACE}/containers/build-helm/stx
+BUILD_OUTPUT_PATH=${MY_WORKSPACE}/std/build-helm/stx
 if [ -d ${BUILD_OUTPUT_PATH} ]; then
     # Wipe out the existing dir to ensure there are no stale files
     rm -rf ${BUILD_OUTPUT_PATH}
@@ -113,7 +106,7 @@ cd ${BUILD_OUTPUT_PATH}
 
 # Extract the helm charts, order does not matter.
 declare -a FAILED
-RPMS_DIR=${MY_WORKSPACE}/containers/rpmbuild/RPMS
+RPMS_DIR=${MY_WORKSPACE}/std/rpmbuild/RPMS
 GREP_GLOB="-[^-]*-[^-]*.tis.noarch.rpm"
 for helm_rpm in $(sed -e 's/#.*//' ${HELM_FILES} | sort -u); do
     case $OS in
