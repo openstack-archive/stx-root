@@ -38,6 +38,7 @@ SKIP_CONSTRAINTS=(
     murano
     neutron
     nova
+    panko
 )
 
 function usage {
