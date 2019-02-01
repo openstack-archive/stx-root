@@ -22,6 +22,7 @@ usage () {
     echo "   build-pkgs [--serial] [args]"
 }
 
+
 SERIAL_FLAG=0
 RC=0
 
@@ -38,11 +39,27 @@ fi
 
 # Make sure we have a dependency cache
 DEP_CACHE="$MY_REPO/cgcs-tis-repo/dependancy-cache"
+
+CURRENT_ID_COMMITS="$MY_WORKSPACE/id-commmits-stx-repos.csv"
+NEW_ID_COMMITS="$(mktemp)"
+
 if [ ! -d $DEP_CACHE ]; then
     echo "Dependency cache is missing.  Creating it now."
     $BUILD_PKGS_DIR/create_dependancy_cache.py > $MY_WORKSPACE/create_dependancy_cache.log
+    repo forall -c  'echo -n "$REPO_PROJECT,"; git rev-parse HEAD' &> $CURRENT_ID_COMMITS
     echo "Dependency cache created."
-    echo ""
+else
+    repo forall -c  'echo -n "$REPO_PROJECT,"; git rev-parse HEAD' &> $NEW_ID_COMMITS
+    if diff $NEW_ID_COMMITS $CURRENT_ID_COMMITS; then
+        echo "No changes for stx projects"
+        rm $NEW_ID_COMMITS
+    else
+        echo "Changes detected for stx projects"
+        echo "Recreating dependecy cache now."
+        mv $NEW_ID_COMMITS $CURRENT_ID_COMMITS
+        $BUILD_PKGS_DIR/create_dependancy_cache.py > $MY_WORKSPACE/create_dependancy_cache.log
+        echo "Dependency cache recreated."
+    fi
 fi
 
 if [ $SERIAL_FLAG -eq 1 ]; then
