@@ -38,11 +38,59 @@ fi
 
 # Make sure we have a dependency cache
 DEP_CACHE="$MY_REPO/cgcs-tis-repo/dependancy-cache"
+
+BUILD_TYPES=(" std rt installer containers")
+DEP_RPM_TYPE=(" RPMS SRPMS ")
+DEP_DELTAS="$DEP_CACHE/deltas-rpms-srpms"
+
+make_cache_current_rpms () {
+
+    FILE=${1}
+
+    if [ -z "${FILE}" ]
+	then
+        echo "File not specified"
+        return;
+    fi
+
+    if [ -f ${FILE} ]
+    then
+        rm ${FILE}
+    fi
+
+    for build_type in $BUILD_TYPES; do
+        for rpm_type in $DEP_RPM_TYPE; do
+
+            if  [ -d $MY_WORKSPACE/$build_type/rpmbuild/$rpm_type/repodata ]; then
+                current=$MY_WORKSPACE/$build_type/rpmbuild/$rpm_type/
+
+                repoquery \
+                    --repofrompath=$build_type-$rpm_type,$current \
+                    --repoid=$build_type-$rpm_type --arch=noarch,src,x86_64 -a --qf "%-10{repoid} %-40{name} %-10{version} %-10{release}" \
+                    >> ${FILE}
+            fi
+        done;
+    done;
+}
+
 if [ ! -d $DEP_CACHE ]; then
     echo "Dependency cache is missing.  Creating it now."
     $BUILD_PKGS_DIR/create_dependancy_cache.py > $MY_WORKSPACE/create_dependancy_cache.log
+    make_cache_current_rpms $DEP_DELTAS
     echo "Dependency cache created."
-    echo ""
+else
+    DEP_TMP=$(mktemp)
+    make_cache_current_rpms $DEP_TMP
+    if diff $DEP_DELTAS $DEP_TMP; then
+        echo "No changes for stx projects"
+        rm $DEP_TMP
+    else
+        echo "Changes detected for stx projects"
+        echo "Recreating dependecy cache now."
+        mv $DEP_TMP $DEP_DELTAS
+        $BUILD_PKGS_DIR/create_dependancy_cache.py > $MY_WORKSPACE/create_dependancy_cache.log
+        echo "Dependency cache recreated."
+    fi
 fi
 
 if [ $SERIAL_FLAG -eq 1 ]; then
