@@ -38,12 +38,50 @@ fi
 
 # Make sure we have a dependency cache
 DEP_CACHE="$MY_REPO/cgcs-tis-repo/dependancy-cache"
+
+DEP_DIRS=(" std rt ")
+DEP_RPM_TYPE=(" RPMS SRPMS ")
+DEP_DELTAS="$DEP_CACHE/deltas-rpms-srpms"
+
+make_cache_current_rpms () {
+
+    FILE=$1
+    if [ -f $FILE ]; then
+        rm $FILE
+    fi
+
+    for cdir in $DEP_DIRS; do
+        for cidir in $DEP_RPM_TYPE; do
+
+            if  [ -d $MY_WORKSPACE/$cdir/rpmbuild/$cidir/repodata ]; then
+                cd $MY_WORKSPACE/$cdir/rpmbuild/$cidir/repodata
+                find . -type f | sed "s|^./|$PWD/|" >> $FILE
+            fi
+        done;
+    done;
+}
+
 if [ ! -d $DEP_CACHE ]; then
     echo "Dependency cache is missing.  Creating it now."
     $BUILD_PKGS_DIR/create_dependancy_cache.py > $MY_WORKSPACE/create_dependancy_cache.log
+    make_cache_current_rpms $DEP_DELTAS
     echo "Dependency cache created."
-    echo ""
+else
+    DEP_TMP=$(mktemp)
+    make_cache_current_rpms $DEP_TMP
+    if diff $DEP_DELTAS $DEP_TMP; then
+        echo "No changes for stx projects"
+        rm $DEP_TMP
+    else
+        echo "Changes detected for stx projects"
+        echo "Recreating dependecy cache now."
+        mv $DEP_TMP $DEP_DELTAS
+        $BUILD_PKGS_DIR/create_dependancy_cache.py > $MY_WORKSPACE/create_dependancy_cache.log
+        echo "Dependency cache recreated."
+    fi
 fi
+
+cd $BUILD_PKGS_DIR
 
 if [ $SERIAL_FLAG -eq 1 ]; then
     echo "build-pkgs-serial $@"
