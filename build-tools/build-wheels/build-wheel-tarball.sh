@@ -21,6 +21,7 @@ OS_VERSION=7.5.1804
 OPENSTACK_RELEASE=pike
 VERSION=$(date --utc '+%Y.%m.%d.%H.%M') # Default version, using timestamp
 PUSH=no
+PROXY=""
 CLEAN=no
 DOCKER_USER=${USER}
 
@@ -51,13 +52,14 @@ Options:
     --os-version:     Specify OS version
     --release:    Openstack release (default: pike)
     --push:       Push to docker repo
+    --proxy:      Set proxy <URL>:<PORT>
     --user:       Docker repo userid
     --version:    Version for pushed image (if used with --push)
 
 EOF
 }
 
-OPTS=$(getopt -o h -l help,os:,os-version:,push,clean,user:,release:,version: -- "$@")
+OPTS=$(getopt -o h -l help,os:,os-version:,push,clean,user:,release:,proxy:,version: -- "$@")
 if [ $? -ne 0 ]; then
     usage
     exit 1
@@ -96,6 +98,10 @@ while true; do
             OPENSTACK_RELEASE=$2
             shift 2
             ;;
+        --proxy)
+            PROXY=$2
+            shift 2
+            ;;
         --version)
             VERSION=$2
             shift 2
@@ -126,7 +132,13 @@ if [ ${VALID_OS} -ne 0 ]; then
 fi
 
 # Build the base wheels and retrieve the StarlingX wheels
-${MY_SCRIPT_DIR}/build-base-wheels.sh --os ${OS} --os-version ${OS_VERSION} --release ${OPENSTACK_RELEASE}
+local -a BUILD_BASE_WL_ARGS
+BUILD_BASE_WL_ARGS+=(--os ${OS} --os-version ${OS_VERSION} --release ${OPENSTACK_RELEASE})
+if [ ! -z "$PROXY" ]; then
+    BUILD_BASE_WL_ARGS+=(--proxy ${PROXY})
+fi
+
+${MY_SCRIPT_DIR}/build-base-wheels.sh ${BUILD_BASE_WL_ARGS[@]}
 if [ $? -ne 0 ]; then
     echo "Failure running build-base-wheels.sh" >&2
     exit 1
