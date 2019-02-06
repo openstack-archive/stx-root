@@ -177,7 +177,6 @@ def file_search(dir, pattern, recursive_depth=0):
 #    rpm_type= 'RPM' or 'SRPM'
 #    arch= e.g. x86_64, only relevant of rpm_type=='RPM'
 def get_repo_primary_data_list(rpm_type='RPM', arch_list=default_arch_list):
-    rpm_repo_roots = []
     rpm_repodata_roots = []
     repodata_list = []
 
@@ -206,7 +205,6 @@ def get_repo_primary_data_list(rpm_type='RPM', arch_list=default_arch_list):
 #    rpm_type= 'RPM' or 'SRPM'
 #    arch= e.g. x86_64, only relevant of rpm_type=='RPM'
 def get_repo_filelists_data_list(rpm_type='RPM', arch_list=default_arch_list):
-    rpm_repo_roots = []
     rpm_repodata_roots = []
     repodata_list = []
 
