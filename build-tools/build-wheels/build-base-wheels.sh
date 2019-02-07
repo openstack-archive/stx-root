@@ -140,7 +140,7 @@ fi
 # Check to see if we need to build anything
 BUILD_NEEDED=no
 for wheel in $(cat ${WHEELS_CFG} | sed 's/#.*//' | awk -F '|' '{print $1}'); do
-    if [ ! -f ${BUILD_OUTPUT_PATH}/${wheel} ]; then
+    if [[ "${wheel}" =~ \* || ! -f ${BUILD_OUTPUT_PATH}/${wheel} ]]; then
         BUILD_NEEDED=yes
         break
     fi
