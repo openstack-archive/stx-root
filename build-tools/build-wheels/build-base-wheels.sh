@@ -20,6 +20,7 @@ KEEP_CONTAINER=no
 OS=centos
 OS_VERSION=7.5.1804
 OPENSTACK_RELEASE=pike
+PROXY=""
 
 function usage {
     cat >&2 <<EOF
@@ -31,12 +32,13 @@ Options:
     --os-version:     Specify OS version
     --keep-image:     Skip deletion of the wheel build image in docker
     --keep-container: Skip deletion of container used for the build
+    --proxy:          Set proxy <URL>:<PORT>
     --release:        Openstack release (default: pike)
 
 EOF
 }
 
-OPTS=$(getopt -o h -l help,os:,os-version:,keep-image,keep-container,release: -- "$@")
+OPTS=$(getopt -o h -l help,os:,os-version:,keep-image,keep-container,release:,proxy: -- "$@")
 if [ $? -ne 0 ]; then
     usage
     exit 1
@@ -69,6 +71,10 @@ while true; do
             ;;
         --release)
             OPENSTACK_RELEASE=$2
+            shift 2
+            ;;
+        --proxy)
+            PROXY=$2
             shift 2
             ;;
         -h | --help )
@@ -134,7 +140,7 @@ fi
 # Check to see if we need to build anything
 BUILD_NEEDED=no
 for wheel in $(cat ${WHEELS_CFG} | sed 's/#.*//' | awk -F '|' '{print $1}'); do
-    if [ ! -f ${BUILD_OUTPUT_PATH}/${wheel} ]; then
+    if [[ "${wheel}" =~ \* || ! -f ${BUILD_OUTPUT_PATH}/${wheel} ]]; then
         BUILD_NEEDED=yes
         break
     fi
@@ -189,10 +195,18 @@ docker images --format '{{.Repository}}:{{.Tag}}' ${OS}:${OS_VERSION} | grep -q 
 BASE_IMAGE_PRESENT=$?
 
 # Create the builder image
-docker build \
-    --build-arg RELEASE=${OS_VERSION} \
-    --build-arg OPENSTACK_RELEASE=${OPENSTACK_RELEASE} \
-    -t ${BUILD_IMAGE_NAME} -f ${DOCKER_PATH}/${OS}-dockerfile ${DOCKER_PATH}
+local -a BUILD_ARGS
+BUILD_ARGS+=(--build-arg RELEASE=${OS_VERSION})
+BUILD_ARGS+=(--build-arg OPENSTACK_RELEASE=${OPENSTACK_RELEASE})
+if [ ! -z "$PROXY" ]; then
+    BUILD_ARGS+=(--build-arg http_proxy=$PROXY)
+    BUILD_ARGS+=(--build-arg https_proxy=$PROXY)
+fi
+BUILD_ARGS+=(-t ${BUILD_IMAGE_NAME})
+BUILD_ARGS+=(-f ${DOCKER_PATH}/${OS}-dockerfile ${DOCKER_PATH})
+
+# Build image
+docker build "${BUILD_ARGS[@]}"
 if [ $? -ne 0 ]; then
     echo "Failed to create build image in docker" >&2
     exit 1
@@ -203,7 +217,16 @@ RM_OPT=
 if [ "${KEEP_CONTAINER}" = "no" ]; then
     RM_OPT="--rm"
 fi
-docker run ${RM_OPT} -v ${BUILD_OUTPUT_PATH}:/wheels ${BUILD_IMAGE_NAME} /docker-build-wheel.sh
+
+local -a RUN_ARGS
+if [ ! -z "$PROXY" ]; then
+    RUN_ARGS+=(--env http_proxy=$PROXY)
+    RUN_ARGS+=(--env https_proxy=$PROXY)
+fi
+RUN_ARGS+=(${RM_OPT} -v ${BUILD_OUTPUT_PATH}:/wheels ${BUILD_IMAGE_NAME} /docker-build-wheel.sh)
+
+# Run container to build wheels
+docker run ${RUN_ARGS[@]}
 
 if [ "${KEEP_IMAGE}" = "no" ]; then
     # Delete the builder image

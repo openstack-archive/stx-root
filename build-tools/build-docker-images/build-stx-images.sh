@@ -24,6 +24,7 @@ IMAGE_VERSION=$(date --utc '+%Y.%m.%d.%H.%M') # Default version, using timestamp
 PREFIX=dev
 LATEST_PREFIX=""
 PUSH=no
+PROXY=""
 DOCKER_USER=${USER}
 DOCKER_REGISTRY=
 BASE=
@@ -45,6 +46,7 @@ Options:
     --base:       Specify base docker image (required option)
     --wheels:     Specify path to wheels tarball or image, URL or docker tag (required option)
     --push:       Push to docker repo
+    --proxy:      Set proxy <URL>:<PORT>
     --user:       Docker repo userid
     --registry:   Docker registry
     --prefix:     Prefix on the image tag (default: dev)
@@ -169,6 +171,9 @@ function build_image_loci {
     BUILD_ARGS+=(--build-arg PROJECT_REPO=${PROJECT_REPO})
     BUILD_ARGS+=(--build-arg FROM=${BASE})
     BUILD_ARGS+=(--build-arg WHEELS=${WHEELS})
+    if [ ! -z "$PROXY" ]; then
+        BUILD_ARGS+=(--build-arg http_proxy=$PROXY)
+    fi
 
     if [ -n "${PROJECT_REF}" ]; then
         BUILD_ARGS+=(--build-arg PROJECT_REF=${PROJECT_REF})
@@ -300,9 +305,15 @@ function build_image_docker {
 
     local build_image_name="${USER}/${LABEL}:${IMAGE_TAG_BUILD}"
 
-    docker build ${docker_src} --no-cache \
-        --build-arg "BASE=${BASE}" \
-        --tag ${build_image_name} 2>&1 | tee ${WORKDIR}/docker-${LABEL}-${OS}-${OPENSTACK_RELEASE}.log
+    local -a BASE_BUILD_ARGS
+    BASE_BUILD_ARGS+=(${docker_src} --no-cache)
+    BASE_BUILD_ARGS+=(--build-arg "BASE=${BASE}")
+    if [ ! -z "$PROXY" ]; then
+        BASE_BUILD_ARGS+=(--build-arg http_proxy=$PROXY)
+    fi
+    BASE_BUILD_ARGS+=(--tag ${build_image_name})
+    docker build ${BASE_BUILD_ARGS[@]} 2>&1 | tee ${WORKDIR}/docker-${LABEL}-${OS}-${OPENSTACK_RELEASE}.log
+
     if [ ${PIPESTATUS[0]} -ne 0 ]; then
         echo "Failed to build ${LABEL}... Aborting"
         RESULTS_FAILED+=(${LABEL})
@@ -349,7 +360,7 @@ function build_image {
     esac
 }
 
-OPTS=$(getopt -o h -l help,os:,version:,release:,push,user:,registry:,release:,base:,wheels:,only:,skip:,prefix:,latest,latest-prefix:,clean -- "$@")
+OPTS=$(getopt -o h -l help,os:,version:,release:,push,proxy:,user:,registry:,release:,base:,wheels:,only:,skip:,prefix:,latest,latest-prefix:,clean -- "$@")
 if [ $? -ne 0 ]; then
     usage
     exit 1
@@ -395,6 +406,10 @@ while true; do
         --push)
             PUSH=yes
             shift
+            ;;
+        --proxy)
+            PROXY=$2
+            shift 2
             ;;
         --user)
             DOCKER_USER=$2

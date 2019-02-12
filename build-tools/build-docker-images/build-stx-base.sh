@@ -21,6 +21,7 @@ OS_VERSION=7.5.1804
 OPENSTACK_RELEASE=pike
 IMAGE_VERSION=
 PUSH=no
+PROXY=""
 DOCKER_USER=${USER}
 DOCKER_REGISTRY=
 declare -a REPO_LIST
@@ -44,6 +45,7 @@ Options:
     --repo:       Software repository (Format: name,baseurl), can be specified multiple times
     --local:      Use local build for software repository (cannot be used with --repo)
     --push:       Push to docker repo
+    --proxy:      Set proxy <URL>:<PORT>
     --latest:     Add a 'latest' tag when pushing
     --latest-tag: Use the provided tag when pushing latest.
     --user:       Docker repo userid
@@ -54,7 +56,7 @@ Options:
 EOF
 }
 
-OPTS=$(getopt -o h -l help,os:,os-version:,version:,release:,repo:,push,latest,latest-tag:,user:,registry:,local,clean,hostname: -- "$@")
+OPTS=$(getopt -o h -l help,os:,os-version:,version:,release:,repo:,push,proxy:,latest,latest-tag:,user:,registry:,local,clean,hostname: -- "$@")
 if [ $? -ne 0 ]; then
     usage
     exit 1
@@ -96,6 +98,10 @@ while true; do
         --push)
             PUSH=yes
             shift
+            ;;
+        --proxy)
+            PROXY=$2
+            shift 2
             ;;
         --latest)
             TAG_LATEST=yes
@@ -217,10 +223,18 @@ BASE_IMAGE_PRESENT=$?
 IMAGE_NAME=${DOCKER_REGISTRY}${DOCKER_USER}/stx-${OS}:${IMAGE_VERSION}
 IMAGE_NAME_LATEST=${DOCKER_REGISTRY}${DOCKER_USER}/stx-${OS}:${LATEST_TAG}
 
-docker build \
-    --build-arg RELEASE=${OS_VERSION} \
-    --build-arg REPO_OPTS="${REPO_OPTS}" \
-    --tag ${IMAGE_NAME} ${BUILDDIR}
+local -a BUILD_ARGS
+BUILD_ARGS+=(--build-arg RELEASE=${OS_VERSION})
+BUILD_ARGS+=(--build-arg REPO_OPTS=${REPO_OPTS})
+
+# Add proxy to docker build
+if [ ! -z "$PROXY" ]; then
+    BUILD_ARGS+=(--build-arg http_proxy=$PROXY)
+fi
+BUILD_ARGS+=(--tag ${IMAGE_NAME} ${BUILDDIR})
+
+# Build base image
+docker build "${BUILD_ARGS[@]}"
 if [ $? -ne 0 ]; then
     echo "Failed running docker build command" >&2
     exit 1
