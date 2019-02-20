@@ -82,7 +82,7 @@ function is_empty {
 
 function get_loci {
     # Use a specific HEAD of loci, to provide a stable builder
-    local LOCI_REF="d0ef425ef6ce19ce79d93bf3a2be1b464750e2f8"
+    local LOCI_REF="432503259f5e624afdabd9dacc9d9b367dd95e96"
 
     ORIGWD=${PWD}
 
