@@ -4,6 +4,15 @@
 source "$SRC_BASE/build-tools/spec-utils"
 source "$SRC_BASE/build-tools/srpm-utils"
 
+function export_tarball() {
+    TARBALL=$1
+    DESTDIR=$2
+    if [ ! -d $DESTDIR ]; then
+        mkdir $DESTDIR
+    fi
+    cp $TARBALL $DESTDIR
+}
+
 CUR_DIR=`pwd`
 BUILD_DIR="$RPMBUILD_BASE"
 
@@ -200,6 +209,7 @@ if [ $TAR_NEEDED -gt 0 ]; then
         echo "ERROR: default_build_srpm (${LINENO}): failed to create tar file, cmd: tar czf  $TAR_PATH $SRC_DIR --exclude '.git*' --exclude 'build' --exclude='.pc' --exclude='patches' --exclude="$SRC_DIR/$DISTRO" --exclude='pbr-*.egg' --transform \"s,^$TRANSFORM,$TAR_NAME-$VERSION,\""
         exit 1
     fi
+    export_tarball $TAR_PATH $MY_WORKSPACE/tarballs
     echo "Created tar file: $TAR_PATH"
 else
     echo "Tar file not needed."
