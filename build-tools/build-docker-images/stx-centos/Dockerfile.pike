@@ -11,6 +11,7 @@ ARG REPO_OPTS
 COPY stx.repo /
 
 RUN set -ex ;\
+    sed -i '/\[main\]/ atimeout=120' /etc/yum.conf ;\
     mv /stx.repo /etc/yum.repos.d/ ;\
     yum upgrade --disablerepo=* ${REPO_OPTS} -y ;\
     yum install --disablerepo=* ${REPO_OPTS} -y \

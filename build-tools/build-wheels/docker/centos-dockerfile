@@ -6,7 +6,9 @@ ARG OPENSTACK_RELEASE=pike
 # Install the necessary packages for building the python modules.
 # Some of these are dependencies of the specific modules, and could
 # instead be added to the wheels.cfg file in the future.
-RUN yum install -y epel-release centos-release-openstack-queens ;\
+RUN set -ex ;\
+    sed -i '/\[main\]/ atimeout=120' /etc/yum.conf ;\
+    yum install -y epel-release centos-release-openstack-queens ;\
     yum install -y git gcc zip bzip2 unzip \
                    python python-devel python-pip python-wheel \
                    wget openldap-devel mariadb mariadb-devel \
