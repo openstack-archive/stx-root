@@ -195,7 +195,7 @@ docker images --format '{{.Repository}}:{{.Tag}}' ${OS}:${OS_VERSION} | grep -q 
 BASE_IMAGE_PRESENT=$?
 
 # Create the builder image
-local -a BUILD_ARGS
+declare -a BUILD_ARGS
 BUILD_ARGS+=(--build-arg RELEASE=${OS_VERSION})
 BUILD_ARGS+=(--build-arg OPENSTACK_RELEASE=${OPENSTACK_RELEASE})
 if [ ! -z "$PROXY" ]; then
@@ -218,7 +218,7 @@ if [ "${KEEP_CONTAINER}" = "no" ]; then
     RM_OPT="--rm"
 fi
 
-local -a RUN_ARGS
+declare -a RUN_ARGS
 if [ ! -z "$PROXY" ]; then
     RUN_ARGS+=(--env http_proxy=$PROXY)
     RUN_ARGS+=(--env https_proxy=$PROXY)

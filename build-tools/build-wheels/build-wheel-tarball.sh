@@ -132,7 +132,7 @@ if [ ${VALID_OS} -ne 0 ]; then
 fi
 
 # Build the base wheels and retrieve the StarlingX wheels
-local -a BUILD_BASE_WL_ARGS
+declare -a BUILD_BASE_WL_ARGS
 BUILD_BASE_WL_ARGS+=(--os ${OS} --os-version ${OS_VERSION} --release ${OPENSTACK_RELEASE})
 if [ ! -z "$PROXY" ]; then
     BUILD_BASE_WL_ARGS+=(--proxy ${PROXY})

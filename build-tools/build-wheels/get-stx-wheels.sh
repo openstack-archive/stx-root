@@ -107,8 +107,8 @@ for wheel in $(sed -e 's/#.*//' ${WHEELS_FILES[@]} | sort -u); do
             # so use grep instead
             wheelfile=$(ls ${MY_WORKSPACE}/std/rpmbuild/RPMS/${wheel}-* | grep -- '[^\-]*-[^\-]*.rpm')
 
-            if [ ! -f ${wheelfile} ]; then
-                echo "Could not find ${wheelfile}" >&2
+            if [ ! -f "${wheelfile}" ]; then
+                echo "Could not find ${wheel}" >&2
                 FAILED+=($wheel)
                 continue
             fi
