@@ -31,6 +31,8 @@ BASE=
 WHEELS=
 CLEAN=no
 TAG_LATEST=no
+TAG_LIST_FILE=
+TAG_LIST_LATEST_FILE=
 declare -a ONLY
 declare -a SKIP
 
@@ -125,6 +127,22 @@ function get_loci {
     cd ${ORIGPWD}
 
     return 0
+}
+
+function update_image_record {
+    # Update the image record file with a new/updated entry
+    local LABEL=$1
+    local TAG=$2
+    local FILE=$3
+
+    grep -q "/${LABEL}:" ${FILE}
+    if [ $? -eq 0 ]; then
+        # Update the existing record
+        sed -i "s#.*/${LABEL}:.*#${TAG}#" ${FILE}
+    else
+        # Add a new record
+        echo "${TAG}" >> ${FILE}
+    fi
 }
 
 function build_image_loci {
@@ -254,6 +272,14 @@ function build_image_loci {
         docker rm ${USER}_update_img
     fi
 
+    if [ "${OS}" = "centos" ]; then
+        # Record python modules and packages
+        docker run --rm ${build_image_name} bash -c 'rpm -qa | sort' \
+            > ${WORKDIR}/${LABEL}-${OS}-${OPENSTACK_RELEASE}.rpmlst
+        docker run --rm ${build_image_name} bash -c 'pip freeze 2>/dev/null | sort' \
+            > ${WORKDIR}/${LABEL}-${OS}-${OPENSTACK_RELEASE}.piplst
+    fi
+
     RESULTS_BUILT+=(${build_image_name})
 
     if [ "${PUSH}" = "yes" ]; then
@@ -262,11 +288,15 @@ function build_image_loci {
         docker push ${push_tag}
         RESULTS_PUSHED+=(${push_tag})
 
+        update_image_record ${LABEL} ${push_tag} ${TAG_LIST_FILE}
+
         if [ "$TAG_LATEST" = "yes" ]; then
             local latest_tag="${DOCKER_REGISTRY}${DOCKER_USER}/${LABEL}:${IMAGE_TAG_LATEST}"
             docker tag ${push_tag} ${latest_tag}
             docker push ${latest_tag}
             RESULTS_PUSHED+=(${latest_tag})
+
+            update_image_record ${LABEL} ${latest_tag} ${TAG_LIST_LATEST_FILE}
         fi
     fi
 }
@@ -320,6 +350,12 @@ function build_image_docker {
         return 1
     fi
 
+    if [ "${OS}" = "centos" ]; then
+        # Record python modules and packages
+        docker run --rm ${build_image_name} bash -c 'rpm -qa | sort' > ${WORKDIR}/${LABEL}.rpmlst
+        docker run --rm ${build_image_name} bash -c 'pip freeze 2>/dev/null | sort' > ${WORKDIR}/${LABEL}.piplst
+    fi
+
     RESULTS_BUILT+=(${build_image_name})
 
     if [ "${PUSH}" = "yes" ]; then
@@ -328,11 +364,15 @@ function build_image_docker {
         docker push ${push_tag}
         RESULTS_PUSHED+=(${push_tag})
 
+        update_image_record ${LABEL} ${push_tag} ${TAG_LIST_FILE}
+
         if [ "$TAG_LATEST" = "yes" ]; then
             local latest_tag="${DOCKER_REGISTRY}${DOCKER_USER}/${LABEL}:${IMAGE_TAG_LATEST}"
             docker tag ${push_tag} ${latest_tag}
             docker push ${latest_tag}
             RESULTS_PUSHED+=(${latest_tag})
+
+            update_image_record ${LABEL} ${latest_tag} ${TAG_LIST_LATEST_FILE}
         fi
     fi
 }
@@ -497,6 +537,19 @@ mkdir -p ${WORKDIR}
 if [ $? -ne 0 ]; then
     echo "Failed to create ${WORKDIR}" >&2
     exit 1
+fi
+
+TAG_LIST_FILE=${WORKDIR}/images-${OS}-${OPENSTACK_RELEASE}-versioned.lst
+TAG_LIST_LATEST_FILE=${WORKDIR}/images-${OS}-${OPENSTACK_RELEASE}-latest.lst
+if [ "${PUSH}" = "yes" ]; then
+    if is_empty ${ONLY[@]} && is_empty ${SKIP[@]}; then
+        # Reset image record files, since we're building everything
+        echo -n > ${TAG_LIST_FILE}
+
+        if [ "$TAG_LATEST" = "yes" ]; then
+            echo -n > ${TAG_LIST_LATEST_FILE}
+        fi
+    fi
 fi
 
 # Check to see if the BASE image is already pulled
