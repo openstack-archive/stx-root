@@ -19,13 +19,13 @@ KEEP_IMAGE=no
 KEEP_CONTAINER=no
 OS=centos
 OS_VERSION=7.5.1804
-OPENSTACK_RELEASE=pike
+BUILD_STREAM=stable
 PROXY=""
 
 function usage {
     cat >&2 <<EOF
 Usage:
-$(basename $0) [ --os <os> ] [ --keep-image ] [ --keep-container ] [ --release <release> ]
+$(basename $0) [ --os <os> ] [ --keep-image ] [ --keep-container ] [ --stream <stable|dev> ]
 
 Options:
     --os:             Specify base OS (eg. centos)
@@ -33,12 +33,12 @@ Options:
     --keep-image:     Skip deletion of the wheel build image in docker
     --keep-container: Skip deletion of container used for the build
     --proxy:          Set proxy <URL>:<PORT>
-    --release:        Openstack release (default: pike)
+    --stream:         Build stream, stable or dev (default: stable)
 
 EOF
 }
 
-OPTS=$(getopt -o h -l help,os:,os-version:,keep-image,keep-container,release:,proxy: -- "$@")
+OPTS=$(getopt -o h -l help,os:,os-version:,keep-image,keep-container,release:,stream:,proxy: -- "$@")
 if [ $? -ne 0 ]; then
     usage
     exit 1
@@ -69,8 +69,12 @@ while true; do
             KEEP_CONTAINER=yes
             shift
             ;;
-        --release)
-            OPENSTACK_RELEASE=$2
+        --stream)
+            BUILD_STREAM=$2
+            shift 2
+            ;;
+        --release) # Temporarily keep --release support as an alias for --stream
+            BUILD_STREAM=$2
             shift 2
             ;;
         --proxy)
@@ -88,16 +92,16 @@ while true; do
     esac
 done
 
-BUILD_OUTPUT_PATH=${MY_WORKSPACE}/std/build-wheels-${OS}-${OPENSTACK_RELEASE}/base
+BUILD_OUTPUT_PATH=${MY_WORKSPACE}/std/build-wheels-${OS}-${BUILD_STREAM}/base
 
-BUILD_IMAGE_NAME="${USER}-$(basename ${MY_WORKSPACE})-wheelbuilder:${OS}-${OPENSTACK_RELEASE}"
+BUILD_IMAGE_NAME="${USER}-$(basename ${MY_WORKSPACE})-wheelbuilder:${OS}-${BUILD_STREAM}"
 
 # BUILD_IMAGE_NAME can't have caps if it's passed to docker build -t $BUILD_IMAGE_NAME.
 # The following will substitute caps with lower case.
 BUILD_IMAGE_NAME="${BUILD_IMAGE_NAME,,}"
 
 DOCKER_FILE=${DOCKER_PATH}/${OS}-dockerfile
-WHEELS_CFG=${DOCKER_PATH}/${OPENSTACK_RELEASE}-wheels.cfg
+WHEELS_CFG=${DOCKER_PATH}/${BUILD_STREAM}-wheels.cfg
 
 function supported_os_list {
     for f in ${DOCKER_PATH}/*-dockerfile; do
@@ -146,7 +150,7 @@ for wheel in $(cat ${WHEELS_CFG} | sed 's/#.*//' | awk -F '|' '{print $1}'); do
     fi
 done
 
-if [ "${OPENSTACK_RELEASE}" = "master" ]; then
+if [ "${BUILD_STREAM}" = "dev" -o "${BUILD_STREAM}" = "master" ]; then
     # Download the master wheel from loci, so we're only building pieces not covered by it
     MASTER_WHEELS_IMAGE="loci/requirements:master-${OS}"
 
@@ -197,7 +201,7 @@ BASE_IMAGE_PRESENT=$?
 # Create the builder image
 declare -a BUILD_ARGS
 BUILD_ARGS+=(--build-arg RELEASE=${OS_VERSION})
-BUILD_ARGS+=(--build-arg OPENSTACK_RELEASE=${OPENSTACK_RELEASE})
+BUILD_ARGS+=(--build-arg BUILD_STREAM=${BUILD_STREAM})
 if [ ! -z "$PROXY" ]; then
     BUILD_ARGS+=(--build-arg http_proxy=$PROXY)
     BUILD_ARGS+=(--build-arg https_proxy=$PROXY)

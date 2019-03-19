@@ -18,7 +18,8 @@ fi
 SUPPORTED_OS_ARGS=('centos')
 OS=centos
 OS_VERSION=7.5.1804
-OPENSTACK_RELEASE=pike
+BUILD_STREAM=stable
+CURRENT_STABLE_OPENSTACK=pike
 VERSION=$(date --utc '+%Y.%m.%d.%H.%M') # Default version, using timestamp
 PUSH=no
 PROXY=""
@@ -49,8 +50,8 @@ $(basename $0)
 
 Options:
     --os:         Specify base OS (valid options: ${SUPPORTED_OS_ARGS[@]})
-    --os-version:     Specify OS version
-    --release:    Openstack release (default: pike)
+    --os-version: Specify OS version
+    --stream:     Build stream, stable or dev (default: stable)
     --push:       Push to docker repo
     --proxy:      Set proxy <URL>:<PORT>
     --user:       Docker repo userid
@@ -59,7 +60,7 @@ Options:
 EOF
 }
 
-OPTS=$(getopt -o h -l help,os:,os-version:,push,clean,user:,release:,proxy:,version: -- "$@")
+OPTS=$(getopt -o h -l help,os:,os-version:,push,clean,user:,release:,stream:,proxy:,version: -- "$@")
 if [ $? -ne 0 ]; then
     usage
     exit 1
@@ -94,8 +95,12 @@ while true; do
             DOCKER_USER=$2
             shift 2
             ;;
-        --release)
-            OPENSTACK_RELEASE=$2
+        --stream)
+            BUILD_STREAM=$2
+            shift 2
+            ;;
+        --release) # Temporarily keep --release support as an alias for --stream
+            BUILD_STREAM=$2
             shift 2
             ;;
         --proxy)
@@ -133,7 +138,7 @@ fi
 
 # Build the base wheels and retrieve the StarlingX wheels
 declare -a BUILD_BASE_WL_ARGS
-BUILD_BASE_WL_ARGS+=(--os ${OS} --os-version ${OS_VERSION} --release ${OPENSTACK_RELEASE})
+BUILD_BASE_WL_ARGS+=(--os ${OS} --os-version ${OS_VERSION} --stream ${BUILD_STREAM})
 if [ ! -z "$PROXY" ]; then
     BUILD_BASE_WL_ARGS+=(--proxy ${PROXY})
 fi
@@ -144,13 +149,13 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-${MY_SCRIPT_DIR}/get-stx-wheels.sh --os ${OS} --release ${OPENSTACK_RELEASE}
+${MY_SCRIPT_DIR}/get-stx-wheels.sh --os ${OS} --stream ${BUILD_STREAM}
 if [ $? -ne 0 ]; then
     echo "Failure running get-stx-wheels.sh" >&2
     exit 1
 fi
 
-BUILD_OUTPUT_PATH=${MY_WORKSPACE}/std/build-wheels-${OS}-${OPENSTACK_RELEASE}/tarball
+BUILD_OUTPUT_PATH=${MY_WORKSPACE}/std/build-wheels-${OS}-${BUILD_STREAM}/tarball
 if [ -d ${BUILD_OUTPUT_PATH} ]; then
     # Wipe out the existing dir to ensure there are no stale files
     rm -rf ${BUILD_OUTPUT_PATH}
@@ -158,18 +163,18 @@ fi
 mkdir -p ${BUILD_OUTPUT_PATH}
 cd ${BUILD_OUTPUT_PATH}
 
-IMAGE_NAME=stx-${OS}-${OPENSTACK_RELEASE}-wheels
+IMAGE_NAME=stx-${OS}-${BUILD_STREAM}-wheels
 
-TARBALL_FNAME=${MY_WORKSPACE}/std/build-wheels-${OS}-${OPENSTACK_RELEASE}/${IMAGE_NAME}.tar
+TARBALL_FNAME=${MY_WORKSPACE}/std/build-wheels-${OS}-${BUILD_STREAM}/${IMAGE_NAME}.tar
 if [ -f ${TARBALL_FNAME} ]; then
     rm -f ${TARBALL_FNAME}
 fi
 
 # Download the global-requirements.txt and upper-constraints.txt files
-if [ "${OPENSTACK_RELEASE}" = "master" ]; then
-    OPENSTACK_BRANCH=${OPENSTACK_RELEASE}
+if [ "${BUILD_STREAM}" = "dev" -o "${BUILD_STREAM}" = "master" ]; then
+    OPENSTACK_BRANCH=master
 else
-    OPENSTACK_BRANCH=stable/${OPENSTACK_RELEASE}
+    OPENSTACK_BRANCH=stable/${CURRENT_STABLE_OPENSTACK}
 fi
 
 wget https://raw.githubusercontent.com/openstack/requirements/${OPENSTACK_BRANCH}/global-requirements.txt
@@ -192,6 +197,9 @@ for name in ${SKIP_CONSTRAINTS[@]}; do
         sed -i "/^${name}===/d" upper-constraints.txt
     fi
 done
+
+# Set nullglob so wildcards will return empty string if no match
+shopt -s nullglob
 
 # Copy the base and stx wheels, updating upper-constraints.txt as necessary
 for wheel in ../base/*.whl ../stx/wheels/*.whl; do
@@ -241,6 +249,8 @@ for wheel in ../base/*.whl ../stx/wheels/*.whl; do
         echo "${name}===${version}" >> upper-constraints.txt
     fi
 done
+
+shopt -u nullglob
 
 echo "Creating $(basename ${TARBALL_FNAME})..."
 tar cf ${TARBALL_FNAME} *

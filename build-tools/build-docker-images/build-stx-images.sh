@@ -19,7 +19,7 @@ source ${MY_REPO}/build-tools/git-utils.sh
 
 SUPPORTED_OS_ARGS=('centos')
 OS=centos
-OPENSTACK_RELEASE=pike
+BUILD_STREAM=stable
 IMAGE_VERSION=$(date --utc '+%Y.%m.%d.%H.%M') # Default version, using timestamp
 PREFIX=dev
 LATEST_PREFIX=""
@@ -42,7 +42,7 @@ $(basename $0)
 Options:
     --os:         Specify base OS (valid options: ${SUPPORTED_OS_ARGS[@]})
     --version:    Specify version for output image
-    --release:    Openstack release (default: pike)
+    --stream:     Build stream, stable or dev (default: stable)
     --base:       Specify base docker image (required option)
     --wheels:     Specify path to wheels tarball or image, URL or docker tag (required option)
     --push:       Push to docker repo
@@ -195,7 +195,7 @@ function build_image_loci {
 
     docker build ${WORKDIR}/loci --no-cache \
         "${BUILD_ARGS[@]}" \
-        --tag ${build_image_name}  2>&1 | tee ${WORKDIR}/docker-${LABEL}-${OS}-${OPENSTACK_RELEASE}.log
+        --tag ${build_image_name}  2>&1 | tee ${WORKDIR}/docker-${LABEL}-${OS}-${BUILD_STREAM}.log
     if [ ${PIPESTATUS[0]} -ne 0 ]; then
         echo "Failed to build ${LABEL}... Aborting"
         RESULTS_FAILED+=(${LABEL})
@@ -312,7 +312,7 @@ function build_image_docker {
         BASE_BUILD_ARGS+=(--build-arg http_proxy=$PROXY)
     fi
     BASE_BUILD_ARGS+=(--tag ${build_image_name})
-    docker build ${BASE_BUILD_ARGS[@]} 2>&1 | tee ${WORKDIR}/docker-${LABEL}-${OS}-${OPENSTACK_RELEASE}.log
+    docker build ${BASE_BUILD_ARGS[@]} 2>&1 | tee ${WORKDIR}/docker-${LABEL}-${OS}-${BUILD_STREAM}.log
 
     if [ ${PIPESTATUS[0]} -ne 0 ]; then
         echo "Failed to build ${LABEL}... Aborting"
@@ -360,7 +360,7 @@ function build_image {
     esac
 }
 
-OPTS=$(getopt -o h -l help,os:,version:,release:,push,proxy:,user:,registry:,release:,base:,wheels:,only:,skip:,prefix:,latest,latest-prefix:,clean -- "$@")
+OPTS=$(getopt -o h -l help,os:,version:,release:,stream:,push,proxy:,user:,registry:,base:,wheels:,only:,skip:,prefix:,latest,latest-prefix:,clean -- "$@")
 if [ $? -ne 0 ]; then
     usage
     exit 1
@@ -391,8 +391,12 @@ while true; do
             IMAGE_VERSION=$2
             shift 2
             ;;
-        --release)
-            OPENSTACK_RELEASE=$2
+        --stream)
+            BUILD_STREAM=$2
+            shift 2
+            ;;
+        --release) # Temporarily keep --release support as an alias for --stream
+            BUILD_STREAM=$2
             shift 2
             ;;
         --prefix)
@@ -473,7 +477,7 @@ if [ -z "${BASE}" ]; then
     exit 1
 fi
 
-IMAGE_TAG="${OS}-${OPENSTACK_RELEASE}"
+IMAGE_TAG="${OS}-${BUILD_STREAM}"
 IMAGE_TAG_LATEST="${IMAGE_TAG}-latest"
 
 if [ -n "${LATEST_PREFIX}" ]; then
@@ -511,10 +515,10 @@ if [ $? -ne 0 ]; then
 fi
 
 # Find the directives files
-for image_build_inc_file in $(find ${GIT_LIST} -maxdepth 1 -name "${OS}_${OPENSTACK_RELEASE}_docker_images.inc"); do
+for image_build_inc_file in $(find ${GIT_LIST} -maxdepth 1 -name "${OS}_${BUILD_STREAM}_docker_images.inc"); do
     basedir=$(dirname ${image_build_inc_file})
     for image_build_dir in $(sed -e 's/#.*//' ${image_build_inc_file} | sort -u); do
-        for image_build_file in ${basedir}/${image_build_dir}/${OS}/*.${OPENSTACK_RELEASE}_docker_image; do
+        for image_build_file in ${basedir}/${image_build_dir}/${OS}/*.${BUILD_STREAM}_docker_image; do
             # Failures are reported by the build functions
             build_image ${image_build_file}
         done
