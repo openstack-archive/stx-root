@@ -16,21 +16,21 @@ fi
 
 SUPPORTED_OS_ARGS=('centos')
 OS=centos
-OPENSTACK_RELEASE=pike
+BUILD_STREAM=stable
 
 function usage {
     cat >&2 <<EOF
 Usage:
-$(basename $0) [ --os <os> ] [ --release <release> ]
+$(basename $0) [ --os <os> ] [ --stream <stable|dev> ]
 
 Options:
     --os:         Specify base OS (eg. centos)
-    --release:    Openstack release (default: pike)
+    --stream:     Openstack release (default: stable)
 
 EOF
 }
 
-OPTS=$(getopt -o h -l help,os:,release: -- "$@")
+OPTS=$(getopt -o h -l help,os:,release:,stream: -- "$@")
 if [ $? -ne 0 ]; then
     usage
     exit 1
@@ -49,8 +49,12 @@ while true; do
             OS=$2
             shift 2
             ;;
-        --release)
-            OPENSTACK_RELEASE=$2
+        --stream)
+            BUILD_STREAM=$2
+            shift 2
+            ;;
+        --release) # Temporarily keep --release support as an alias for --stream
+            BUILD_STREAM=$2
             shift 2
             ;;
         -h | --help )
@@ -81,7 +85,7 @@ fi
 source ${MY_REPO}/build-tools/git-utils.sh
 
 function get_wheels_files {
-    find ${GIT_LIST} -maxdepth 1 -name "${OS}_${OPENSTACK_RELEASE}_wheels.inc"
+    find ${GIT_LIST} -maxdepth 1 -name "${OS}_${BUILD_STREAM}_wheels.inc"
 }
 
 declare -a WHEELS_FILES=($(get_wheels_files))
@@ -90,7 +94,7 @@ if [ ${#WHEELS_FILES[@]} -eq 0 ]; then
     exit 1
 fi
 
-BUILD_OUTPUT_PATH=${MY_WORKSPACE}/std/build-wheels-${OS}-${OPENSTACK_RELEASE}/stx
+BUILD_OUTPUT_PATH=${MY_WORKSPACE}/std/build-wheels-${OS}-${BUILD_STREAM}/stx
 if [ -d ${BUILD_OUTPUT_PATH} ]; then
     # Wipe out the existing dir to ensure there are no stale files
     rm -rf ${BUILD_OUTPUT_PATH}

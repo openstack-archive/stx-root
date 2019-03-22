@@ -1,7 +1,7 @@
 ARG RELEASE=7.5.1804
 FROM centos:${RELEASE}
 
-ARG OPENSTACK_RELEASE=pike
+ARG BUILD_STREAM=stable
 
 # Install the necessary packages for building the python modules.
 # Some of these are dependencies of the specific modules, and could
@@ -17,5 +17,5 @@ RUN set -ex ;\
     pip install --upgrade pip setuptools
 
 COPY docker-build-wheel.sh /
-COPY ${OPENSTACK_RELEASE}-wheels.cfg /wheels.cfg
+COPY ${BUILD_STREAM}-wheels.cfg /wheels.cfg
 

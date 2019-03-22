@@ -5,7 +5,7 @@ PRIVATE_REGISTRY=xxx.xxx.xxx.xxx:9001
 VERSION=2018.11.13
 OS=centos
 OS_VERSION=7.5.1804
-OPENSTACK_RELEASE=pike
+BUILD_STREAM=stable
 HOST_PORT=8088
 
 ## Step 1: Build stx-centos
@@ -25,15 +25,15 @@ time $MY_REPO/build-tools/build-docker-images/build-stx-base.sh \
 time $MY_REPO/build-tools/build-wheels/build-wheel-tarball.sh \
     --os ${OS} \
     --os-version ${OS_VERSION} \
-    --release ${OPENSTACK_RELEASE}
+    --stream ${BUILD_STREAM}
 
 ## Step 3: Build images
 time $MY_REPO/build-tools/build-docker-images/build-stx-images.sh \
     --os ${OS} \
     --version ${VERSION} \
-    --release ${OPENSTACK_RELEASE} \
+    --stream ${BUILD_STREAM} \
     --base ${PRIVATE_REGISTRY}/${PRIVATE_REGISTRY_USERID}/stx-${OS}:${VERSION} \
-    --wheels http://${HOSTNAME}:${HOST_PORT}/${MY_WORKSPACE}/std/build-wheels-${OS}-${OPENSTACK_RELEASE}/stx-${OS}-${OPENSTACK_RELEASE}-wheels.tar \
+    --wheels http://${HOSTNAME}:${HOST_PORT}/${MY_WORKSPACE}/std/build-wheels-${OS}-${BUILD_STREAM}/stx-${OS}-${OPENSTACK_RELEASE}-wheels.tar \
     --user ${PRIVATE_REGISTRY_USERID} \
     --registry ${PRIVATE_REGISTRY} \
     --push --latest \
