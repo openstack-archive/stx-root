@@ -145,6 +145,73 @@ function update_image_record {
     fi
 }
 
+function post_build {
+    #
+    # Common utility function called from image build functions to run post-build steps.
+    #
+    local image_build_file=$1
+    local LABEL=$2
+    local build_image_name=$3
+
+    # Get additional supported args
+    #
+    # To avoid polluting the environment and impacting
+    # other builds, we're going to explicitly grab specific
+    # variables from the directives file. While this does
+    # mean the file is sourced repeatedly, it ensures we
+    # don't get junk.
+    local CUSTOMIZATION
+    CUSTOMIZATION=$(source ${image_build_file} && echo ${CUSTOMIZATION})
+
+    if [ -n "${CUSTOMIZATION}" ]; then
+        docker run --name ${USER}_update_img ${build_image_name} bash -c "${CUSTOMIZATION}"
+        if [ $? -ne 0 ]; then
+            echo "Failed to add customization for ${LABEL}... Aborting"
+            RESULTS_FAILED+=(${LABEL})
+            docker rm ${USER}_update_img
+            return 1
+        fi
+
+        docker commit --change='CMD ["bash"]' ${USER}_update_img ${build_image_name}
+        if [ $? -ne 0 ]; then
+            echo "Failed to commit customization for ${LABEL}... Aborting"
+            RESULTS_FAILED+=(${LABEL})
+            docker rm ${USER}_update_img
+            return 1
+        fi
+
+        docker rm ${USER}_update_img
+    fi
+
+    if [ "${OS}" = "centos" ]; then
+        # Record python modules and packages
+        docker run --rm ${build_image_name} bash -c 'rpm -qa | sort' \
+            > ${WORKDIR}/${LABEL}-${OS}-${BUILD_STREAM}.rpmlst
+        docker run --rm ${build_image_name} bash -c 'pip freeze 2>/dev/null | sort' \
+            > ${WORKDIR}/${LABEL}-${OS}-${BUILD_STREAM}.piplst
+    fi
+
+    RESULTS_BUILT+=(${build_image_name})
+
+    if [ "${PUSH}" = "yes" ]; then
+        local push_tag="${DOCKER_REGISTRY}${DOCKER_USER}/${LABEL}:${IMAGE_TAG}"
+        docker tag ${build_image_name} ${push_tag}
+        docker push ${push_tag}
+        RESULTS_PUSHED+=(${push_tag})
+
+        update_image_record ${LABEL} ${push_tag} ${TAG_LIST_FILE}
+
+        if [ "$TAG_LATEST" = "yes" ]; then
+            local latest_tag="${DOCKER_REGISTRY}${DOCKER_USER}/${LABEL}:${IMAGE_TAG_LATEST}"
+            docker tag ${push_tag} ${latest_tag}
+            docker push ${latest_tag}
+            RESULTS_PUSHED+=(${latest_tag})
+
+            update_image_record ${LABEL} ${latest_tag} ${TAG_LIST_LATEST_FILE}
+        fi
+    fi
+}
+
 function build_image_loci {
     local image_build_file=$1
 
@@ -169,8 +236,6 @@ function build_image_loci {
     DIST_PACKAGES=$(source ${image_build_file} && echo ${DIST_PACKAGES})
     local PROFILES
     PROFILES=$(source ${image_build_file} && echo ${PROFILES})
-    local CUSTOMIZATION
-    CUSTOMIZATION=$(source ${image_build_file} && echo ${CUSTOMIZATION})
 
     if is_in ${PROJECT} ${SKIP[@]} || is_in ${LABEL} ${SKIP[@]}; then
         echo "Skipping ${LABEL}"
@@ -252,53 +317,7 @@ function build_image_loci {
         fi
     fi
 
-    if [ -n "${CUSTOMIZATION}" ]; then
-        docker run --name ${USER}_update_img ${build_image_name} bash -c "${CUSTOMIZATION}"
-        if [ $? -ne 0 ]; then
-            echo "Failed to add customization for ${LABEL}... Aborting"
-            RESULTS_FAILED+=(${LABEL})
-            docker rm ${USER}_update_img
-            return 1
-        fi
-
-        docker commit --change='CMD ["bash"]' ${USER}_update_img ${build_image_name}
-        if [ $? -ne 0 ]; then
-            echo "Failed to commit customization for ${LABEL}... Aborting"
-            RESULTS_FAILED+=(${LABEL})
-            docker rm ${USER}_update_img
-            return 1
-        fi
-
-        docker rm ${USER}_update_img
-    fi
-
-    if [ "${OS}" = "centos" ]; then
-        # Record python modules and packages
-        docker run --rm ${build_image_name} bash -c 'rpm -qa | sort' \
-            > ${WORKDIR}/${LABEL}-${OS}-${BUILD_STREAM}.rpmlst
-        docker run --rm ${build_image_name} bash -c 'pip freeze 2>/dev/null | sort' \
-            > ${WORKDIR}/${LABEL}-${OS}-${BUILD_STREAM}.piplst
-    fi
-
-    RESULTS_BUILT+=(${build_image_name})
-
-    if [ "${PUSH}" = "yes" ]; then
-        local push_tag="${DOCKER_REGISTRY}${DOCKER_USER}/${LABEL}:${IMAGE_TAG}"
-        docker tag ${build_image_name} ${push_tag}
-        docker push ${push_tag}
-        RESULTS_PUSHED+=(${push_tag})
-
-        update_image_record ${LABEL} ${push_tag} ${TAG_LIST_FILE}
-
-        if [ "$TAG_LATEST" = "yes" ]; then
-            local latest_tag="${DOCKER_REGISTRY}${DOCKER_USER}/${LABEL}:${IMAGE_TAG_LATEST}"
-            docker tag ${push_tag} ${latest_tag}
-            docker push ${latest_tag}
-            RESULTS_PUSHED+=(${latest_tag})
-
-            update_image_record ${LABEL} ${latest_tag} ${TAG_LIST_LATEST_FILE}
-        fi
-    fi
+    post_build ${image_build_file} ${LABEL} ${build_image_name}
 }
 
 function build_image_docker {
@@ -350,33 +369,7 @@ function build_image_docker {
         return 1
     fi
 
-    if [ "${OS}" = "centos" ]; then
-        # Record python modules and packages
-        docker run --rm ${build_image_name} bash -c 'rpm -qa | sort' \
-            > ${WORKDIR}/${LABEL}-${OS}-${BUILD_STREAM}.rpmlst
-        docker run --rm ${build_image_name} bash -c 'pip freeze 2>/dev/null | sort' \
-            > ${WORKDIR}/${LABEL}-${OS}-${BUILD_STREAM}.piplst
-    fi
-
-    RESULTS_BUILT+=(${build_image_name})
-
-    if [ "${PUSH}" = "yes" ]; then
-        local push_tag="${DOCKER_REGISTRY}${DOCKER_USER}/${LABEL}:${IMAGE_TAG}"
-        docker tag ${build_image_name} ${push_tag}
-        docker push ${push_tag}
-        RESULTS_PUSHED+=(${push_tag})
-
-        update_image_record ${LABEL} ${push_tag} ${TAG_LIST_FILE}
-
-        if [ "$TAG_LATEST" = "yes" ]; then
-            local latest_tag="${DOCKER_REGISTRY}${DOCKER_USER}/${LABEL}:${IMAGE_TAG_LATEST}"
-            docker tag ${push_tag} ${latest_tag}
-            docker push ${latest_tag}
-            RESULTS_PUSHED+=(${latest_tag})
-
-            update_image_record ${LABEL} ${latest_tag} ${TAG_LIST_LATEST_FILE}
-        fi
-    fi
+    post_build ${image_build_file} ${LABEL} ${build_image_name}
 }
 
 function build_image {
