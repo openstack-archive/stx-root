@@ -33,7 +33,7 @@ time $MY_REPO/build-tools/build-docker-images/build-stx-images.sh \
     --version ${VERSION} \
     --stream ${BUILD_STREAM} \
     --base ${PRIVATE_REGISTRY}/${PRIVATE_REGISTRY_USERID}/stx-${OS}:${VERSION} \
-    --wheels http://${HOSTNAME}:${HOST_PORT}/${MY_WORKSPACE}/std/build-wheels-${OS}-${BUILD_STREAM}/stx-${OS}-${OPENSTACK_RELEASE}-wheels.tar \
+    --wheels http://${HOSTNAME}:${HOST_PORT}/${MY_WORKSPACE}/std/build-wheels-${OS}-${BUILD_STREAM}/stx-${OS}-${BUILD_STREAM}-wheels.tar \
     --user ${PRIVATE_REGISTRY_USERID} \
     --registry ${PRIVATE_REGISTRY} \
     --push --latest \

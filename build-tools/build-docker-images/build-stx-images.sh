@@ -275,9 +275,9 @@ function build_image_loci {
     if [ "${OS}" = "centos" ]; then
         # Record python modules and packages
         docker run --rm ${build_image_name} bash -c 'rpm -qa | sort' \
-            > ${WORKDIR}/${LABEL}-${OS}-${OPENSTACK_RELEASE}.rpmlst
+            > ${WORKDIR}/${LABEL}-${OS}-${BUILD_STREAM}.rpmlst
         docker run --rm ${build_image_name} bash -c 'pip freeze 2>/dev/null | sort' \
-            > ${WORKDIR}/${LABEL}-${OS}-${OPENSTACK_RELEASE}.piplst
+            > ${WORKDIR}/${LABEL}-${OS}-${BUILD_STREAM}.piplst
     fi
 
     RESULTS_BUILT+=(${build_image_name})
@@ -353,9 +353,9 @@ function build_image_docker {
     if [ "${OS}" = "centos" ]; then
         # Record python modules and packages
         docker run --rm ${build_image_name} bash -c 'rpm -qa | sort' \
-            > ${WORKDIR}/${LABEL}-${OS}-${OPENSTACK_RELEASE}.rpmlst
+            > ${WORKDIR}/${LABEL}-${OS}-${BUILD_STREAM}.rpmlst
         docker run --rm ${build_image_name} bash -c 'pip freeze 2>/dev/null | sort' \
-            > ${WORKDIR}/${LABEL}-${OS}-${OPENSTACK_RELEASE}.piplst
+            > ${WORKDIR}/${LABEL}-${OS}-${BUILD_STREAM}.piplst
     fi
 
     RESULTS_BUILT+=(${build_image_name})
@@ -545,8 +545,8 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-TAG_LIST_FILE=${WORKDIR}/images-${OS}-${OPENSTACK_RELEASE}-versioned.lst
-TAG_LIST_LATEST_FILE=${WORKDIR}/images-${OS}-${OPENSTACK_RELEASE}-latest.lst
+TAG_LIST_FILE=${WORKDIR}/images-${OS}-${BUILD_STREAM}-versioned.lst
+TAG_LIST_LATEST_FILE=${WORKDIR}/images-${OS}-${BUILD_STREAM}-latest.lst
 if [ "${PUSH}" = "yes" ]; then
     if is_empty ${ONLY[@]} && is_empty ${SKIP[@]}; then
         # Reset image record files, since we're building everything
