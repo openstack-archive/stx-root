@@ -2,7 +2,6 @@
 [-]doc[-]
 [-]dbg[-]
 vswitch-staticdev
-guest-scale-agent-staticdev
 vim-spell
 openssh-server-sysvinit
 openstack-neutron-linuxbridge
