@@ -142,7 +142,14 @@ function from_git {
 
         # Build the wheel
         python setup.py bdist_wheel
-        cp dist/$wheelname $OUTPUTDIR || echo $wheelname >> $FAILED_LOG
+        if [ -f dist/$wheelname ]; then
+            cp dist/$wheelname $OUTPUTDIR || echo $wheelname >> $FAILED_LOG
+        else
+            echo $wheelname >> $FAILED_LOG
+            echo "Could not find dist/$wheelname"
+            echo "Searching for wheel:"
+            find dist/ -name '*.whl'
+        fi
         popd
     done
 }
@@ -196,7 +203,14 @@ function from_tar {
 
         # Build the wheel
         python setup.py bdist_wheel
-        cp dist/$wheelname $OUTPUTDIR || echo $wheelname >> $FAILED_LOG
+        if [ -f dist/$wheelname ]; then
+            cp dist/$wheelname $OUTPUTDIR || echo $wheelname >> $FAILED_LOG
+        else
+            echo $wheelname >> $FAILED_LOG
+            echo "Could not find dist/$wheelname"
+            echo "Searching for wheel:"
+            find dist/ -name '*.whl'
+        fi
         popd
     done
 }
@@ -241,7 +255,14 @@ function from_zip {
 
         # Build the wheel
         python setup.py bdist_wheel
-        cp dist/$wheelname $OUTPUTDIR || echo $wheelname >> $FAILED_LOG
+        if [ -f dist/$wheelname ]; then
+            cp dist/$wheelname $OUTPUTDIR || echo $wheelname >> $FAILED_LOG
+        else
+            echo $wheelname >> $FAILED_LOG
+            echo "Could not find dist/$wheelname"
+            echo "Searching for wheel:"
+            find dist/ -name '*.whl'
+        fi
         popd
     done
 }
