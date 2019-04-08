@@ -42,6 +42,7 @@ smartmontools
 collectd
 puppet-collectd
 socat
+attr
 
 # for realtime kernel
 rtctl
