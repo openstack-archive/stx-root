@@ -17,19 +17,29 @@ fi
 
 SUPPORTED_OS_ARGS=('centos')
 OS=centos
+LABEL=stable-latest
+declare -a IMAGE_FILES
 
 function usage {
     cat >&2 <<EOF
 Usage:
-$(basename $0) [ --os <os> ] [ --verbose ]
+$(basename $0) [ --os <os> ] [-i, --image-file <image-file>] [--label <label>] [ --verbose ]
 Options:
-    --os:         Specify base OS (eg. centos)
-    --verbose:    Verbose output
-    --help:       Give this help list
+    --os:                 Specify base OS (eg. centos)
+    -i, --image-file:     Specify the path to image file(s) or url(s). Multiple
+                          files/urls can be specified with a comma-separated list,
+                          or with multiple --image-file arguments.
+                          Note: Files are in order of priority. Images may appear
+                          in multiple files, the last image reference has higher
+                          priority.
+    --label:              Specify the label of the application tarball. The label
+                          is used to construct the name of tarball.
+    --verbose:            Verbose output
+    --help:               Give this help list
 EOF
 }
 
-OPTS=$(getopt -o h -l help,os:,verbose -- "$@")
+OPTS=$(getopt -o h,i: -l help,os:,image-file:,label:,verbose -- "$@")
 if [ $? -ne 0 ]; then
     usage
     exit 1
@@ -46,6 +56,15 @@ while true; do
             ;;
         --os)
             OS=$2
+            shift 2
+            ;;
+        -i | --image-file)
+            # Read comma-separated values into array
+            IMAGE_FILES+=(${2//,/ })
+            shift 2
+            ;;
+        --label)
+            LABEL=$2
             shift 2
             ;;
         --verbose)
@@ -104,6 +123,51 @@ fi
 mkdir -p ${BUILD_OUTPUT_PATH}
 cd ${BUILD_OUTPUT_PATH}
 
+IMAGE_FILE_PATH=${BUILD_OUTPUT_PATH}/image_file
+if [ ${#IMAGE_FILES[@]} -ne 0 ]; then
+    mkdir ${IMAGE_FILE_PATH}
+fi
+
+# Read the image versions from the passed image
+# files and build them into armada manifest
+function build_image_versions_to_manifest {
+    local manifest_file=$1
+
+    for image_file in ${IMAGE_FILES[@]}; do
+
+        if [[ ${image_file} =~ ^https?://.*(.lst|.txt)$ ]]; then
+            wget --quiet --no-clobber ${image_file} \
+                 --directory-prefix ${IMAGE_FILE_PATH}
+
+            if [ $? -ne 0 ]; then
+                echo "Failed to download image file from ${image_file}" >&2
+                exit 1
+            fi
+        elif [[ -f ${image_file} && ${image_file} =~ .lst|.txt ]]; then
+            cp ${image_file} ${IMAGE_FILE_PATH}
+        else
+            echo "Cannot recognize the provided image file:${image_file}" >&2
+            exit 1
+        fi
+
+        image_file=${IMAGE_FILE_PATH}/${image_file##*/}
+        for image_pattern in $(sed -e 's#/#\\/#g' ${image_file}); do
+
+            # Extract image name from the input image file and
+            image_name=$(echo ${image_pattern} | sed -n 's/.*\/\(.*\):.*$/\1/p')
+
+            # Replace the old image with the new image in manifest file
+            old_image_pattern="\([a-zA-Z0-9.]*\|[0-9.:]*\)\/.*${image_name}:.*"
+            sed -i "s/${old_image_pattern}/${image_pattern}/" ${manifest_file}
+
+            if [ $? -ne 0 ]; then
+                echo "Failed to update manifest file" >&2
+                exit 1
+            fi
+        done
+    done
+}
+
 # Extract the helm charts, order does not matter.
 declare -a FAILED
 RPMS_DIR=${MY_WORKSPACE}/std/rpmbuild/RPMS
@@ -155,6 +219,7 @@ cp -R usr/lib/helm staging/charts
 # Build tarballs for each armada yaml file
 echo "Results:"
 for manifest in usr/lib/armada/*.yaml; do
+    build_image_versions_to_manifest ${manifest}
     cp ${manifest} staging/.
     manifest_file=${manifest##*/}
     manifest_name=${manifest_file%.yaml}
@@ -162,14 +227,15 @@ for manifest in usr/lib/armada/*.yaml; do
     cd staging
     find . -type f ! -name '*.md5' -print0 | xargs -0 md5sum > checksum.md5
     cd ..
-    tar ${TAR_FLAGS} "helm-charts-${manifest_name}.tgz" -C staging/ .
+    tarball_name="helm-charts-${manifest_name}-${LABEL}.tgz"
+    tar ${TAR_FLAGS} ${tarball_name} -C staging/ .
     if [ $? -ne 0 ]; then
         echo "Failed to create the tarball" >&2
         exit 1
     fi
     rm staging/${manifest_file}
     rm staging/checksum.md5
-    echo "    ${BUILD_OUTPUT_PATH}/helm-charts-${manifest_name}.tgz"
+    echo "    ${BUILD_OUTPUT_PATH}/${tarball_name}"
 done
 
 exit 0
