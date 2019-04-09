@@ -1,13 +1,15 @@
 #!/bin/bash
 #
-# Copyright (c) 2018 Wind River Systems, Inc.
+# Copyright (c) 2018-2019 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
-# This utility builds the StarlingX wheel tarball
+# This utility builds the StarlingX container images
 #
 
 MY_SCRIPT_DIR=$(dirname $(readlink -f $0))
+
+source ${MY_SCRIPT_DIR}/../build-wheels/utils.sh
 
 # Required env vars
 if [ -z "${MY_WORKSPACE}" -o -z "${MY_REPO}" ]; then
@@ -35,6 +37,7 @@ TAG_LIST_FILE=
 TAG_LIST_LATEST_FILE=
 declare -a ONLY
 declare -a SKIP
+declare -i MAX_ATTEMPTS=1
 
 function usage {
     cat >&2 <<EOF
@@ -61,6 +64,7 @@ Options:
     --skip <image> : Skip building the specified image(s). Multiple images
                      can be specified with a comma-separated list, or with
                      multiple --skip arguments.
+    --attempts:   Max attempts, in case of failure (default: 1)
 
 
 EOF
@@ -276,7 +280,7 @@ function build_image_loci {
 
     local build_image_name="${USER}/${LABEL}:${IMAGE_TAG_BUILD}"
 
-    docker build ${WORKDIR}/loci --no-cache \
+    with_retries ${MAX_ATTEMPTS} docker build ${WORKDIR}/loci --no-cache \
         "${BUILD_ARGS[@]}" \
         --tag ${build_image_name}  2>&1 | tee ${WORKDIR}/docker-${LABEL}-${OS}-${BUILD_STREAM}.log
     if [ ${PIPESTATUS[0]} -ne 0 ]; then
@@ -361,7 +365,7 @@ function build_image_docker {
         BASE_BUILD_ARGS+=(--build-arg http_proxy=$PROXY)
     fi
     BASE_BUILD_ARGS+=(--tag ${build_image_name})
-    docker build ${BASE_BUILD_ARGS[@]} 2>&1 | tee ${WORKDIR}/docker-${LABEL}-${OS}-${BUILD_STREAM}.log
+    with_retries ${MAX_ATTEMPTS} docker build ${BASE_BUILD_ARGS[@]} 2>&1 | tee ${WORKDIR}/docker-${LABEL}-${OS}-${BUILD_STREAM}.log
 
     if [ ${PIPESTATUS[0]} -ne 0 ]; then
         echo "Failed to build ${LABEL}... Aborting"
@@ -395,7 +399,7 @@ function build_image {
     esac
 }
 
-OPTS=$(getopt -o h -l help,os:,version:,release:,stream:,push,proxy:,user:,registry:,base:,wheels:,only:,skip:,prefix:,latest,latest-prefix:,clean -- "$@")
+OPTS=$(getopt -o h -l help,os:,version:,release:,stream:,push,proxy:,user:,registry:,base:,wheels:,only:,skip:,prefix:,latest,latest-prefix:,clean,attempts: -- "$@")
 if [ $? -ne 0 ]; then
     usage
     exit 1
@@ -477,6 +481,10 @@ while true; do
             TAG_LATEST=yes
             shift
             ;;
+        --attempts)
+            MAX_ATTEMPTS=$2
+            shift 2
+            ;;
         -h | --help )
             usage
             exit 1
@@ -555,6 +563,9 @@ fi
 docker images --format '{{.Repository}}:{{.Tag}}' ${BASE} | grep -q "^${BASE}$"
 BASE_IMAGE_PRESENT=$?
 
+# Pull the image anyway, to ensure it's up to date
+docker pull ${BASE}
+
 # Download loci, if needed.
 get_loci
 if [ $? -ne 0 ]; then
@@ -573,7 +584,7 @@ for image_build_inc_file in $(find ${GIT_LIST} -maxdepth 1 -name "${OS}_${BUILD_
     done
 done
 
-if [ "${CLEAN}" = "yes" ]; then
+if [ "${CLEAN}" = "yes" -a ${#RESULTS_BUILT[@]} -gt 0 ]; then
     # Delete the images
     echo "Deleting images"
     docker image rm ${RESULTS_BUILT[@]} ${RESULTS_PUSHED[@]}
