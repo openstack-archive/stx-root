@@ -1,0 +1,9 @@
+Code-Review+2: Scott Little <scott.little@windriver.com>
+Code-Review+2: Erich Cordoba <erich.cordoba.malibran@intel.com>
+Workflow+1: Erich Cordoba <erich.cordoba.malibran@intel.com>
+Verified+2: Zuul
+Submitted-by: Zuul
+Submitted-at: Thu, 11 Apr 2019 19:48:49 +0000
+Reviewed-on: https://review.openstack.org/651374
+Project: openstack/stx-root
+Branch: refs/heads/master
