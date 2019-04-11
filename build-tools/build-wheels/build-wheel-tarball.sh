@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Copyright (c) 2018 Wind River Systems, Inc.
+# Copyright (c) 2018-2019 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -8,6 +8,8 @@
 #
 
 MY_SCRIPT_DIR=$(dirname $(readlink -f $0))
+
+source ${MY_SCRIPT_DIR}/utils.sh
 
 # Required env vars
 if [ -z "${MY_WORKSPACE}" -o -z "${MY_REPO}" ]; then
@@ -25,6 +27,7 @@ PUSH=no
 PROXY=""
 CLEAN=no
 DOCKER_USER=${USER}
+declare -i MAX_ATTEMPTS=1
 
 # List of top-level services for images, which should not be listed in upper-constraints.txt
 SKIP_CONSTRAINTS=(
@@ -56,11 +59,12 @@ Options:
     --proxy:      Set proxy <URL>:<PORT>
     --user:       Docker repo userid
     --version:    Version for pushed image (if used with --push)
+    --attempts:   Max attempts, in case of failure (default: 1)
 
 EOF
 }
 
-OPTS=$(getopt -o h -l help,os:,os-version:,push,clean,user:,release:,stream:,proxy:,version: -- "$@")
+OPTS=$(getopt -o h -l help,os:,os-version:,push,clean,user:,release:,stream:,proxy:,version:,attempts: -- "$@")
 if [ $? -ne 0 ]; then
     usage
     exit 1
@@ -111,6 +115,10 @@ while true; do
             VERSION=$2
             shift 2
             ;;
+        --attempts)
+            MAX_ATTEMPTS=$2
+            shift 2
+            ;;
         -h | --help )
             usage
             exit 1
@@ -143,7 +151,7 @@ if [ ! -z "$PROXY" ]; then
     BUILD_BASE_WL_ARGS+=(--proxy ${PROXY})
 fi
 
-${MY_SCRIPT_DIR}/build-base-wheels.sh ${BUILD_BASE_WL_ARGS[@]}
+${MY_SCRIPT_DIR}/build-base-wheels.sh ${BUILD_BASE_WL_ARGS[@]} --attempts ${MAX_ATTEMPTS}
 if [ $? -ne 0 ]; then
     echo "Failure running build-base-wheels.sh" >&2
     exit 1
@@ -177,13 +185,13 @@ else
     OPENSTACK_BRANCH=stable/${CURRENT_STABLE_OPENSTACK}
 fi
 
-wget https://raw.githubusercontent.com/openstack/requirements/${OPENSTACK_BRANCH}/global-requirements.txt
+with_retries ${MAX_ATTEMPTS} wget https://raw.githubusercontent.com/openstack/requirements/${OPENSTACK_BRANCH}/global-requirements.txt
 if [ $? -ne 0 ]; then
     echo "Failed to download global-requirements.txt" >&2
     exit 1
 fi
 
-wget https://raw.githubusercontent.com/openstack/requirements/${OPENSTACK_BRANCH}/upper-constraints.txt
+with_retries ${MAX_ATTEMPTS} wget https://raw.githubusercontent.com/openstack/requirements/${OPENSTACK_BRANCH}/upper-constraints.txt
 if [ $? -ne 0 ]; then
     echo "Failed to download upper-constraints.txt" >&2
     exit 1

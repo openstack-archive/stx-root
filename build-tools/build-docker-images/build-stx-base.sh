@@ -1,13 +1,15 @@
 #!/bin/bash
 #
-# Copyright (c) 2018 Wind River Systems, Inc.
+# Copyright (c) 2018-2019 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
-# This utility builds the StarlingX wheel tarball
+# This utility builds the StarlingX base image
 #
 
 MY_SCRIPT_DIR=$(dirname $(readlink -f $0))
+
+source ${MY_SCRIPT_DIR}/../build-wheels/utils.sh
 
 # Required env vars
 if [ -z "${MY_WORKSPACE}" -o -z "${MY_REPO}" ]; then
@@ -31,6 +33,7 @@ CLEAN=no
 TAG_LATEST=no
 LATEST_TAG=latest
 HOST=${HOSTNAME}
+declare -i MAX_ATTEMPTS=1
 
 function usage {
     cat >&2 <<EOF
@@ -52,11 +55,12 @@ Options:
     --registry:   Docker registry
     --clean:      Remove image(s) from local registry
     --hostname:   build repo host
+    --attempts:   Max attempts, in case of failure (default: 1)
 
 EOF
 }
 
-OPTS=$(getopt -o h -l help,os:,os-version:,version:,stream:,release:,repo:,push,proxy:,latest,latest-tag:,user:,registry:,local,clean,hostname: -- "$@")
+OPTS=$(getopt -o h -l help,os:,os-version:,version:,stream:,release:,repo:,push,proxy:,latest,latest-tag:,user:,registry:,local,clean,hostname:,attempts: -- "$@")
 if [ $? -ne 0 ]; then
     usage
     exit 1
@@ -130,6 +134,10 @@ while true; do
             ;;
         --hostname)
             HOST=$2
+            shift 2
+            ;;
+        --attempts)
+            MAX_ATTEMPTS=$2
             shift 2
             ;;
         -h | --help )
@@ -223,6 +231,9 @@ done
 docker images --format '{{.Repository}}:{{.Tag}}' ${OS}:${OS_VERSION} | grep -q "^${OS}:${OS_VERSION}$"
 BASE_IMAGE_PRESENT=$?
 
+# Pull the image anyway, to ensure it is up to date
+docker pull ${OS}:${OS_VERSION}
+
 # Build the image
 IMAGE_NAME=${DOCKER_REGISTRY}${DOCKER_USER}/stx-${OS}:${IMAGE_VERSION}
 IMAGE_NAME_LATEST=${DOCKER_REGISTRY}${DOCKER_USER}/stx-${OS}:${LATEST_TAG}
@@ -238,7 +249,7 @@ fi
 BUILD_ARGS+=(--tag ${IMAGE_NAME} ${BUILDDIR})
 
 # Build base image
-docker build "${BUILD_ARGS[@]}"
+with_retries ${MAX_ATTEMPTS} docker build "${BUILD_ARGS[@]}"
 if [ $? -ne 0 ]; then
     echo "Failed running docker build command" >&2
     exit 1

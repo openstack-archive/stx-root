@@ -1,12 +1,16 @@
 #!/bin/bash
 #
-# Copyright (c) 2018 Wind River Systems, Inc.
+# Copyright (c) 2018-2019 Wind River Systems, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
 # This utility sets up a docker image to build wheels
 # for a set of upstream python modules.
 #
+
+MY_SCRIPT_DIR=$(dirname $(readlink -f $0))
+
+source ${MY_SCRIPT_DIR}/utils.sh
 
 # Required env vars
 if [ -z "${MY_WORKSPACE}" -o -z "${MY_REPO}" ]; then
@@ -21,6 +25,7 @@ OS=centos
 OS_VERSION=7.5.1804
 BUILD_STREAM=stable
 PROXY=""
+declare -i MAX_ATTEMPTS=1
 
 function usage {
     cat >&2 <<EOF
@@ -34,11 +39,12 @@ Options:
     --keep-container: Skip deletion of container used for the build
     --proxy:          Set proxy <URL>:<PORT>
     --stream:         Build stream, stable or dev (default: stable)
+    --attempts:       Max attempts, in case of failure (default: 1)
 
 EOF
 }
 
-OPTS=$(getopt -o h -l help,os:,os-version:,keep-image,keep-container,release:,stream:,proxy: -- "$@")
+OPTS=$(getopt -o h -l help,os:,os-version:,keep-image,keep-container,release:,stream:,proxy:,attempts: -- "$@")
 if [ $? -ne 0 ]; then
     usage
     exit 1
@@ -79,6 +85,10 @@ while true; do
             ;;
         --proxy)
             PROXY=$2
+            shift 2
+            ;;
+        --attempts)
+            MAX_ATTEMPTS=$2
             shift 2
             ;;
         -h | --help )
@@ -210,7 +220,7 @@ BUILD_ARGS+=(-t ${BUILD_IMAGE_NAME})
 BUILD_ARGS+=(-f ${DOCKER_PATH}/${OS}-dockerfile ${DOCKER_PATH})
 
 # Build image
-docker build "${BUILD_ARGS[@]}"
+with_retries ${MAX_ATTEMPTS} docker build "${BUILD_ARGS[@]}"
 if [ $? -ne 0 ]; then
     echo "Failed to create build image in docker" >&2
     exit 1
@@ -230,7 +240,7 @@ fi
 RUN_ARGS+=(${RM_OPT} -v ${BUILD_OUTPUT_PATH}:/wheels ${BUILD_IMAGE_NAME} /docker-build-wheel.sh)
 
 # Run container to build wheels
-docker run ${RUN_ARGS[@]}
+with_retries ${MAX_ATTEMPTS} docker run ${RUN_ARGS[@]}
 
 if [ "${KEEP_IMAGE}" = "no" ]; then
     # Delete the builder image
