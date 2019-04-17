@@ -166,6 +166,12 @@ function post_build {
     # don't get junk.
     local CUSTOMIZATION
     CUSTOMIZATION=$(source ${image_build_file} && echo ${CUSTOMIZATION})
+    # Default TIS_PATCH_VER to 0, if not set
+    local -i TIS_PATCH_VER
+    TIS_PATCH_VER=$(source ${image_build_file} && echo ${TIS_PATCH_VER:-0})
+
+    local IMAGE_TAG_VERSIONED="${IMAGE_TAG}.${TIS_PATCH_VER}"
+
 
     if [ -n "${CUSTOMIZATION}" ]; then
         docker run --name ${USER}_update_img ${build_image_name} bash -c "${CUSTOMIZATION}"
@@ -198,7 +204,7 @@ function post_build {
     RESULTS_BUILT+=(${build_image_name})
 
     if [ "${PUSH}" = "yes" ]; then
-        local push_tag="${DOCKER_REGISTRY}${DOCKER_USER}/${LABEL}:${IMAGE_TAG}"
+        local push_tag="${DOCKER_REGISTRY}${DOCKER_USER}/${LABEL}:${IMAGE_TAG_VERSIONED}"
         docker tag ${build_image_name} ${push_tag}
         docker push ${push_tag}
         RESULTS_PUSHED+=(${push_tag})
