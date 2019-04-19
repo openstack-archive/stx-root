@@ -5,6 +5,7 @@ acpid
 gdb
 influxdb
 python2-influxdb
+python2-gunicorn
 iperf3
 isomd5sum
 python2-aodhclient
