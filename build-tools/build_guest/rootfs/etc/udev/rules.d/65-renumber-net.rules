@@ -1,4 +1,0 @@
-# Renames interfaces to be sequential ethX interface names regardless of interface type
-# This is required to avoid a kernel host patch that starts number at 1000 and to
-# override slot specific naming for non-kernel interfaces.
-ACTION=="add", SUBSYSTEM=="net", DRIVERS=="?*", ATTR{type}=="1", KERNEL=="eth?*" PROGRAM=="/usr/lib/udev/renumber_device", NAME="$result"

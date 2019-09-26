@@ -1,7 +1,0 @@
-# list of packages to be excluded from guest image
-cpp
-gcc
-gcc-c++
-gdb
-linux-firmware
-rpm-build
